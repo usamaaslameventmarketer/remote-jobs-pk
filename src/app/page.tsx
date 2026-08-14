@@ -198,19 +198,20 @@ const SENIORITY_FILTERS = [
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; seniority?: string }>
+  searchParams: Promise<{ q?: string; seniority?: string; company?: string }>
 }) {
-  const { q, seniority } = await searchParams
+  const { q, seniority, company } = await searchParams
   const listings = await getListings()
 
   const filtered = listings.filter((l) => {
     if (seniority && l.seniority !== seniority) return false
+    const co = Array.isArray(l.companies) ? l.companies[0] : l.companies
+    if (company && co?.name !== company) return false
     if (q) {
       const s = q.toLowerCase()
-      const company = Array.isArray(l.companies) ? l.companies[0] : l.companies
       if (
         !l.title.toLowerCase().includes(s) &&
-        !company?.name?.toLowerCase().includes(s) &&
+        !co?.name?.toLowerCase().includes(s) &&
         !l.tags?.some((t: string) => t.toLowerCase().includes(s))
       )
         return false
@@ -218,7 +219,7 @@ export default async function HomePage({
     return true
   })
 
-  const hasFilters = !!(q || seniority)
+  const hasFilters = !!(q || seniority || company)
 
   return (
     <>

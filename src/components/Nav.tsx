@@ -19,15 +19,21 @@ export function Nav() {
           >
             Browse Jobs
           </Link>
-          <span className="text-sm text-[#8BAFC9] font-medium cursor-default select-none">
+          <Link
+            href="/companies"
+            className="text-sm text-[#8BAFC9] hover:text-white transition-colors font-medium"
+          >
             Companies
-          </span>
+          </Link>
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="hidden sm:block text-sm text-[#8BAFC9] font-medium cursor-default select-none">
+          <Link
+            href="/login"
+            className="hidden sm:block text-sm text-[#8BAFC9] hover:text-white transition-colors font-medium"
+          >
             Log in
-          </span>
+          </Link>
           <span className="text-sm bg-[#1A6B4A] text-white px-4 py-1.5 rounded-lg font-medium cursor-default select-none">
             Post a Job
           </span>
