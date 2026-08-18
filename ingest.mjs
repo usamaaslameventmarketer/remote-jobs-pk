@@ -40,16 +40,18 @@ const WIPE = process.argv.includes('--wipe')
 // ---------------------------------------------------------------------------
 
 const GREENHOUSE_SLUGS = [
-  'canonical', 'gitlab', 'deel', 'zapier', 'automattic',
-  'toptal', 'buffer', 'doist', 'circle', 'hashicorp',
-  'elastic', 'netlify', 'cloudflare', 'linear', 'notion',
-  'stripe', 'twilio', 'sendgrid', 'hubspot', 'intercom',
+  // confirmed responding (sorted by job count)
+  'stripe', 'anthropic', 'datadog', 'mongodb', 'okta',
+  'canonical', 'cloudflare', 'elastic', 'gitlab', 'coinbase',
+  'figma', 'twilio', 'asana', 'robinhood', 'intercom',
+  'postman', 'gusto', 'vercel', 'checkr', 'dropbox',
+  'pagerduty', 'airtable', 'contentful', 'lattice', 'remote',
+  'netlify',
 ]
 
 const LEVER_SLUGS = [
-  'canonical', 'deel', 'zapier', 'buffer', 'doist',
-  'automattic', 'toptal', 'invision', 'hotjar', 'remote',
-  'loom', 'pitch', 'miro', 'typeform',
+  // confirmed responding
+  'toptal',
 ]
 
 // ---------------------------------------------------------------------------
@@ -354,11 +356,13 @@ async function fetchGreenhouse() {
   let done = 0
 
   const NAME_MAP = {
-    canonical: 'Canonical', gitlab: 'GitLab', deel: 'Deel', zapier: 'Zapier',
-    automattic: 'Automattic', toptal: 'Toptal', buffer: 'Buffer', doist: 'Doist',
-    circle: 'Circle', hashicorp: 'HashiCorp', elastic: 'Elastic', netlify: 'Netlify',
-    cloudflare: 'Cloudflare', linear: 'Linear', notion: 'Notion', stripe: 'Stripe',
-    twilio: 'Twilio', sendgrid: 'SendGrid', hubspot: 'HubSpot', intercom: 'Intercom',
+    stripe: 'Stripe', anthropic: 'Anthropic', datadog: 'Datadog', mongodb: 'MongoDB',
+    okta: 'Okta', canonical: 'Canonical', cloudflare: 'Cloudflare', elastic: 'Elastic',
+    gitlab: 'GitLab', coinbase: 'Coinbase', figma: 'Figma', twilio: 'Twilio',
+    asana: 'Asana', robinhood: 'Robinhood', intercom: 'Intercom', postman: 'Postman',
+    gusto: 'Gusto', vercel: 'Vercel', checkr: 'Checkr', dropbox: 'Dropbox',
+    pagerduty: 'PagerDuty', airtable: 'Airtable', contentful: 'Contentful',
+    lattice: 'Lattice', remote: 'Remote.com', netlify: 'Netlify',
   }
 
   await Promise.allSettled(
