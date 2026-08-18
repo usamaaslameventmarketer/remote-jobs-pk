@@ -1,13 +1,18 @@
 /**
- * Ingestion pipeline — Remotive, Arbeitnow, RemoteOK
+ * Ingestion pipeline — Remotive, Arbeitnow, RemoteOK, Greenhouse, Lever
  *
  * Three-stage filter:
- *   1. Region filter  — reject explicit single-country restrictions
- *   2. Quality filter — reject obvious low-skill/spam roles via title keywords
- *   3. Claude pass    — borderline listings (no clear quality signal) go to
- *                       claude-haiku-4-5 for a final include/exclude verdict
+ *   1. Region filter   — 4-tier priority system (see classifyRegion)
+ *                        Tier 3 approved: EMEA and APAC only.
+ *                        Plain "Europe" / continent names alone → REJECT.
+ *                        Reject: single-country restrictions (not Pakistan)
+ *   2. Category filter — EXACTLY 6 allowed: Sales, Marketing, Software Dev,
+ *                        HR, Legal, Finance. Everything else rejected.
+ *   3. Claude pass     — borderline listings sent to claude-haiku with the
+ *                        same 6-category + region rule as explicit instruction.
  *
- * Usage: node ingest.mjs
+ * Usage: ANTHROPIC_API_KEY=sk-... node ingest.mjs [--wipe]
+ *   --wipe  Delete all rows from listings and companies before ingesting.
  * Safe to rerun — deduplicates by original_url.
  */
 
@@ -26,95 +31,177 @@ const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
 const anthropic = ANTHROPIC_API_KEY ? new Anthropic({ apiKey: ANTHROPIC_API_KEY }) : null
 
+const WIPE = process.argv.includes('--wipe')
+
 // ---------------------------------------------------------------------------
-// Stage 1 — Region filter
+// Greenhouse / Lever seed list
+// Add company slugs here as we identify more globally-remote employers.
+// Each slug is tried independently; 404s are silently skipped.
 // ---------------------------------------------------------------------------
 
-// Phrases that confirm a listing is genuinely globally accessible
-const REGION_ALLOW = [
-  'worldwide', 'global', 'anywhere', 'international', 'remote',
-  'apac', 'emea', 'south asia', 'pakistan', 'latin america',
-  'developing countries', 'emerging markets', 'any country', 'all countries',
+const GREENHOUSE_SLUGS = [
+  'canonical', 'gitlab', 'deel', 'zapier', 'automattic',
+  'toptal', 'buffer', 'doist', 'circle', 'hashicorp',
+  'elastic', 'netlify', 'cloudflare', 'linear', 'notion',
+  'stripe', 'twilio', 'sendgrid', 'hubspot', 'intercom',
 ]
 
-// Patterns that indicate a single-country restriction
-const REGION_REJECT = [
-  /\b(must be|need to be|you('re| are) expected to be)\s+(based|located|residing?|resident)\s+in\b/i,
-  /\bright\s+to\s+work\s+in\b/i,
-  /\beligib(le|ility)\s+to\s+work\s+in\b/i,
-  /\bwork\s+(authoriz|permit|visa)\s+(required|needed)\s+in\b/i,
-  /\b(uk|united kingdom|great britain)\s+(only|residents?|based|citizens?)\b/i,
-  /\b(us|usa|united states|america)\s+(only|residents?|based|citizens?)\b/i,
-  /\b(eu|europe|european union)\s+(only|residents?|based|citizens?)\b/i,
-  /\b(canada|australia|germany|france|netherlands)\s+(only|residents?|based|citizens?)\b/i,
-  /\b(must|need to)\s+(live|reside|be located)\s+in\s+(the\s+)?(uk|us|eu|canada|australia|germany|france)\b/i,
+const LEVER_SLUGS = [
+  'canonical', 'deel', 'zapier', 'buffer', 'doist',
+  'automattic', 'toptal', 'invision', 'hotjar', 'remote',
+  'loom', 'pitch', 'miro', 'typeform',
 ]
 
-function passesRegionFilter(location, description = '') {
-  if (!location) return true
+// ---------------------------------------------------------------------------
+// Stage 1 — Region filter (4-tier)
+//
+// Tier 1: Worldwide / Anywhere / no restriction   → highest priority
+// Tier 2: Explicitly Pakistan / South Asia
+// Tier 3: EMEA or APAC only (other continental labels → REJECT)
+// Tier 4: Visa sponsorship for Pakistani talent   → lowest priority
+// null  : Single-country restriction (not Pakistan) → REJECT
+// ---------------------------------------------------------------------------
 
-  const loc = location.toLowerCase()
+const SINGLE_COUNTRIES = [
+  'usa', 'united states', 'us only', 'u.s.', 'america',
+  'uk', 'united kingdom', 'britain', 'england', 'great britain',
+  'germany', 'deutschland', 'france', 'spain', 'italy',
+  'netherlands', 'holland', 'canada', 'australia',
+  'india', 'brazil', 'mexico', 'portugal', 'sweden',
+  'norway', 'denmark', 'finland', 'poland', 'czech republic',
+  'czechia', 'romania', 'ukraine', 'israel', 'turkey',
+  'japan', 'south korea', 'singapore', 'hong kong',
+  'new zealand', 'ireland', 'austria', 'belgium', 'switzerland',
+  'malaysia', 'thailand', 'philippines', 'indonesia',
+  'vietnam', 'greece', 'hungary', 'bulgaria', 'croatia',
+  'serbia', 'slovakia', 'slovenia', 'latvia', 'estonia',
+  'lithuania', 'cyprus', 'malta', 'egypt', 'kenya', 'nigeria',
+]
 
-  // Explicit allow phrases → definitely keep
-  if (REGION_ALLOW.some((s) => loc.includes(s))) return true
+/**
+ * @returns {{ tier: number, normalized: string } | null}
+ * null = reject
+ */
+function classifyRegion(location) {
+  const raw = (location ?? '').trim()
+  if (!raw || raw.toLowerCase() === 'remote') return { tier: 1, normalized: 'Worldwide' }
 
-  // Scan both location field and start of description for rejection language
-  const text = (location + ' ' + (description || '').slice(0, 1000)).toLowerCase()
-  if (REGION_REJECT.some((p) => p.test(text))) return false
+  const l = raw.toLowerCase()
 
-  return true
+  // Tier 1 — Worldwide
+  if (/worldwide|global|anywhere|international|no location restriction|location independent|work from anywhere|\bwfa\b|all countries|fully remote|any country/.test(l)) {
+    return { tier: 1, normalized: 'Worldwide' }
+  }
+
+  // Tier 2 — Pakistan / South Asia explicitly
+  if (/pakistan|south asia/.test(l)) {
+    return { tier: 2, normalized: /south asia/.test(l) ? 'South Asia' : 'Pakistan' }
+  }
+
+  // Tier 3 — Approved broad multi-country regions: EMEA and APAC only
+  // Plain "Europe", "Asia", "Latin America", "Africa", "Middle East" alone → REJECT
+  if (/\bemea\b/.test(l)) return { tier: 3, normalized: 'EMEA' }
+  if (/\bapac\b|asia[- ]pacific/.test(l)) return { tier: 3, normalized: 'APAC' }
+
+  // Tier 4 — Visa sponsorship / relocation
+  if (/visa sponsorship|relocation (support|assistance)|work authorization|sponsorship available/.test(l)) {
+    return { tier: 4, normalized: 'Visa Sponsorship Available' }
+  }
+
+  // Single-country detection — strip common prefixes then match
+  const stripped = l
+    .replace(/^remote\s*[-–—(]?\s*/i, '')
+    .replace(/\)$/, '')
+    .trim()
+
+  if (SINGLE_COUNTRIES.some((c) => stripped === c || stripped === c + ' only')) {
+    return null // reject
+  }
+
+  // Also reject if location contains restriction language + a single country name
+  if (/\b(only|residents?|citizens?|must be (based|located) in)\b/.test(l)) {
+    if (SINGLE_COUNTRIES.some((c) => l.includes(c))) return null
+  }
+
+  // Ambiguous / specific city / plain continent name — reject
+  return null
 }
 
 // ---------------------------------------------------------------------------
-// Stage 2 — Quality filter (deterministic keyword pass)
+// Stage 2 — Category filter (exactly 6 allowed)
+// Returns: 'include' | 'exclude' | 'borderline'
 // ---------------------------------------------------------------------------
 
-// Titles that clearly signal a quality professional role → fast-track include
-const QUALITY_TITLE_RE =
-  /engineer|developer|programmer|architect|scientist|analyst|designer|ux|ui\s|product\s(manager|owner|lead)|devops|sre|cloud|infrastructure|security|cyber|machine learning|mlops|nlp|backend|front.?end|full.?stack|mobile|ios|android|data\s(engineer|scientist|analyst)|marketing\s(manager|director|strategist|lead)|content\s(strategist|manager)|operations\s(manager|lead)|project\s+manager|program\s+manager|scrum|agile\s+coach|finance\s+manager|financial\s+analyst|accountant|qa\s+engineer|quality\s+engineer|technical\s+writer|growth\s+hacker|seo\s+manager|customer\s+success\s+manager|copywriter|brand\s+strategist|cto|cpo|vp\s+of/i
+function classifyCategory(title, tags = [], apiCategory = '') {
+  const t = title
+  const cat = apiCategory
 
-// Titles/categories that signal clearly low-skill or spam → fast-track exclude
-const SPAM_TITLE_RE =
-  /\bdata\s+entry\b|\btranscri(ption|ber)\b|\bclick.?worker\b|\bmicro.?task\b|\bcall\s+center\b|\bchatter\b|\bsurvey\s+(taker|completer)\b|\bform\s+filler\b|\bcaptcha\b|\bsocial\s+media\s+poster\b/i
+  // ── Hard blocklist — checked FIRST, before any include patterns ───────────
+  if (/customer\s+(service|support|success)|support\s+specialist|help\s+desk|\bux\s+designer\b|\bui\s+designer\b|graphic\s+designer|product\s+(manager|designer|owner|lead)|visual\s+designer|operations\s+manager|project\s+manager|program\s+manager|\bscrum\b|agile\s+coach|technical\s+writer|community\s+manager|social\s+media\s+manager|content\s+creator|data\s+entry|transcri|virtual\s+assistant|supply\s+chain|logistics|procurement|purchasing|copywriter|creative\s+director|store\s+manager|retail|barber|cleaner|cleaning|maintenance\s+(tech|planner|worker)|room\s+attendant|bell\s+(person|hop)|lifeguard|painter\b|sandblaster|infanteer|surveyor|estimator|porter\b|coffee\s+roaster|merchandis|loss\s+prevention|facilities\s+planner|operator\s+sewing|sub\s+agent|general\s+manager|cabin\s+clean/i.test(t)) return 'exclude'
 
-// API category strings that are low-quality signals (Remotive / RemoteOK use these)
-const SPAM_CATEGORY_RE =
-  /\bdata\s+entry\b|\btranscription\b|\bcustomer\s+service\b|\bclerical\b|\badmin\s+assistant\b|\bvirtual\s+assistant\b/i
+  // ── Software Development / Engineering ──────────────────────────────────
+  if (/\b(software\s+engineer|software\s+developer|software\s+architect|web\s+developer|backend\s+engineer|frontend\s+engineer|front.?end\s+engineer|full.?stack\s+engineer|full.?stack\s+developer|mobile\s+engineer|mobile\s+developer|ios\s+engineer|android\s+engineer|devops\s+engineer|\bsre\b|site\s+reliability\s+engineer|platform\s+engineer|data\s+engineer|ml\s+engineer|machine\s+learning\s+engineer|ai\s+engineer|security\s+engineer|network\s+engineer|solutions\s+architect|cloud\s+engineer|cloud\s+architect|firmware\s+engineer|embedded\s+engineer|blockchain\s+developer|data\s+scientist|programmer|developer|qa\s+engineer|quality\s+engineer|database\s+admin|\bdba\b|\bdevops\b|\bsysadmin\b)\b/i.test(t)) return 'include'
+  if (/\bsoftware.?dev(elopment)?\b|\bdevops\b|\bsysadmin\b|\bdata\s+science\b|\bmachine\s+learning\b/i.test(cat)) return 'include'
 
-// Returns: 'include' | 'exclude' | 'borderline'
-function qualityPass(title, tags = [], category = '') {
-  if (SPAM_TITLE_RE.test(title)) return 'exclude'
-  if (SPAM_CATEGORY_RE.test(category)) return 'exclude'
-  // Tag-based spam check (RemoteOK tags)
-  const tagStr = tags.join(' ')
-  if (SPAM_CATEGORY_RE.test(tagStr)) return 'exclude'
+  // ── Sales ────────────────────────────────────────────────────────────────
+  if (/\bsales\b|account\s+executive|account\s+manager|business\s+development|\bbdr\b|\bsdr\b|\badr\b|revenue\s+operations|\brevops\b|sales\s+engineer|inside\s+sales/i.test(t)) return 'include'
+  if (/\bsales\b/i.test(cat) && !/engineer|software|developer/i.test(t)) return 'include'
 
-  if (QUALITY_TITLE_RE.test(title)) return 'include'
+  // ── Marketing ────────────────────────────────────────────────────────────
+  if (/\bmarketing\b|\bseo\b|content\s+market|email\s+market|digital\s+market|growth\s+market|brand\s+manager|demand\s+gen(eration)?|performance\s+market|paid\s+(media|social|search|ads)|affiliate\s+market/i.test(t)) return 'include'
+  if (/\bmarketing\b/i.test(cat) && /\bmarketing\b/i.test(t)) return 'include'
+
+  // ── HR / Human Resources ─────────────────────────────────────────────────
+  if (/human\s+resources|\bhr\b|recruiter|recruiting|talent\s+acquisition|people\s+ops|people\s+operations|hr\s+manager|hr\s+director|workforce\s+planning|\bhrbp\b|compensation\s+&\s+benefits|employee\s+relations/i.test(t)) return 'include'
+  if (/\bhuman\s+resources\b|\brecruiter\b|\btalent\s+acquisition\b/i.test(cat)) return 'include'
+
+  // ── Legal ────────────────────────────────────────────────────────────────
+  if (/\blegal\b|\bcounsel\b|compliance\s+officer|paralegal|\battorney\b|\blawyer\b|contract\s+manager|general\s+counsel|in.?house\s+counsel|gdpr|privacy\s+counsel|legal\s+ops/i.test(t)) return 'include'
+  if (/\blegal\b/i.test(cat) && /\blegal\b|\bcounsel\b|\bcompliance\b|\bparalegal\b|\battorney\b/i.test(t)) return 'include'
+
+  // ── Finance ──────────────────────────────────────────────────────────────
+  if (/\bfinance\b|\bfinancial\b|accountant|accounting|\bcfo\b|\bcontroller\b|\bfp&a\b|\bfpa\b|bookkeeper|payroll|treasury|tax\s+specialist|financial\s+analyst|revenue\s+analyst|financial\s+controller|\baudit\b|financial\s+reporting/i.test(t)) return 'include'
+  if (/\bfinance\b|\baccounting\b/i.test(cat) && /\bfinance\b|\bfinancial\b|\baccountant\b|\baccounting\b|\bpayroll\b|\baudit\b/i.test(t)) return 'include'
+
+  // ── Secondary exclude by api_category (if clearly out of scope) ──────────
+  if (/customer.?service|support|design|product\s+management|content\s+writing|writing/i.test(cat) && !/marketing|finance|legal|hr|sales|software|engineering/i.test(cat)) return 'exclude'
 
   return 'borderline'
 }
 
 // ---------------------------------------------------------------------------
-// Stage 3 — Claude classification for borderline listings
+// Stage 3 — Claude classification (borderline listings)
 // ---------------------------------------------------------------------------
 
 async function claudeClassify(listing) {
-  if (!anthropic) return 'include' // no API key — skip Claude pass silently
-  const prompt = `You are a filter for a remote job board targeting skilled Pakistani university graduates and experienced professionals.
+  if (!anthropic) return 'exclude' // safe default when no key
 
-Classify this job listing as exactly one of: "include" or "exclude"
+  const prompt = `You are a strict filter for a remote job board targeting skilled Pakistani university graduates and professionals.
 
-INCLUDE if: genuine professional-grade remote role (software engineering, product, design, data/analytics, strategic marketing, operations, finance, PM, QA engineering, technical writing, cybersecurity, etc.) at a real company, open to worldwide or Pakistan-based applicants.
+INCLUDE only if BOTH conditions are true:
 
-EXCLUDE if: low-skill or gig-style role (generic data entry, basic customer support with no specialization, transcription, micro-tasks, suspiciously vague employer), OR explicitly restricted to a single country that excludes Pakistan.
+1. CATEGORY — the role clearly belongs to one of EXACTLY these 6 categories:
+   • Sales (account executives, BDRs, SDRs, business development)
+   • Marketing (digital marketing, SEO, content marketing, growth marketing, paid ads)
+   • Software Development / Engineering (software engineers, devops, data engineers, ML engineers, QA engineers, security engineers, architects)
+   • HR / Human Resources (recruiters, talent acquisition, HR managers, people ops)
+   • Legal (counsel, compliance, paralegal, contract managers)
+   • Finance (financial analysts, accountants, FP&A, controllers, payroll)
+   Do NOT include: Customer Support, Product Management, UX/UI Design, Project Management, Technical Writing, Operations, Data Analytics (standalone), or anything else not in the 6 above.
+
+2. REGION — the role is open to one of:
+   • Worldwide / Anywhere / Fully Remote (no country restriction)
+   • Explicitly names Pakistan or South Asia as eligible
+   • Broad multi-country region: EMEA or APAC specifically (not plain "Europe" or "Asia" alone)
+   Do NOT include: roles restricted to a single country other than Pakistan (e.g. "Remote - UK", "US only", "must be based in Germany"), or plain continent labels like "Europe (Remote)" without EMEA/APAC framing.
 
 Title: ${listing.title}
+Category/Tags: ${(listing.tags ?? []).join(', ')}
 Company: ${listing.company_name}
 Region/Location: ${listing.region}
-Tags: ${(listing.tags ?? []).join(', ')}
-Description excerpt: ${(listing.short_summary ?? '').slice(0, 300)}
+Description: ${(listing.short_summary ?? '').slice(0, 400)}
 
-Reply with ONLY the word "include" or "exclude".`
+Reply with ONLY "include" or "exclude".`
 
   try {
     const msg = await anthropic.messages.create({
@@ -122,11 +209,10 @@ Reply with ONLY the word "include" or "exclude".`
       max_tokens: 10,
       messages: [{ role: 'user', content: prompt }],
     })
-    const verdict = msg.content[0].text.trim().toLowerCase()
-    return verdict === 'include' ? 'include' : 'exclude'
+    return msg.content[0].text.trim().toLowerCase() === 'include' ? 'include' : 'exclude'
   } catch (err) {
-    console.error('  Claude classify error:', err.message)
-    return 'include' // default to include on API error
+    console.error('  Claude error:', err.message)
+    return 'exclude' // safe default — exclude on error rather than pollute feed
   }
 }
 
@@ -150,18 +236,6 @@ function deriveSeniority(title) {
   return 'mid'
 }
 
-function normalizeRegion(location) {
-  if (!location) return 'Worldwide'
-  const l = location.toLowerCase()
-  if (!l || l.includes('worldwide') || l.includes('global') || l.includes('anywhere') || l === 'remote') return 'Worldwide'
-  if (l.includes('pakistan')) return 'Pakistan'
-  if (l.includes('south asia')) return 'South Asia'
-  if (l.includes('apac') || l.includes('asia pacific')) return 'APAC'
-  if (l.includes('emea')) return 'EMEA'
-  if (l.includes('latin')) return 'Latin America'
-  return location.slice(0, 60)
-}
-
 function brandFetchLogo(domain) {
   if (!domain) return null
   const d = domain.replace(/^https?:\/\//, '').split('/')[0]
@@ -177,123 +251,226 @@ const companyCache = {}
 async function upsertCompany({ name, logo_url, website }) {
   if (companyCache[name]) return companyCache[name]
 
-  const { data: existing } = await sb
-    .from('companies')
-    .select('id')
-    .eq('name', name)
-    .maybeSingle()
-
-  if (existing) {
-    companyCache[name] = existing.id
-    return existing.id
-  }
+  const { data: existing } = await sb.from('companies').select('id').eq('name', name).maybeSingle()
+  if (existing) { companyCache[name] = existing.id; return existing.id }
 
   const domain = website?.replace(/^https?:\/\//, '').split('/')[0] ?? null
-  const { data, error } = await sb
-    .from('companies')
-    .insert({
-      name,
-      logo_url: logo_url || brandFetchLogo(domain),
-      website: website || null,
-      industry: null,
-      pakistan_friendly: false,
-    })
-    .select('id')
-    .single()
+  const { data, error } = await sb.from('companies').insert({
+    name,
+    logo_url: logo_url || brandFetchLogo(domain),
+    website: website || null,
+    industry: null,
+    pakistan_friendly: false,
+  }).select('id').single()
 
-  if (error) {
-    console.error(`  Company insert failed (${name}):`, error.message)
-    return null
-  }
+  if (error) { console.error(`  Company insert failed (${name}):`, error.message); return null }
   companyCache[name] = data.id
   return data.id
 }
 
 // ---------------------------------------------------------------------------
-// Sources
+// Sources — aggregators
 // ---------------------------------------------------------------------------
 
 async function fetchRemotive() {
-  console.log('Fetching Remotive...')
-  const res = await fetch('https://remotive.com/api/remote-jobs?limit=100', {
-    headers: { 'User-Agent': 'RemoteJobsPK/1.0' },
-  })
+  process.stdout.write('[Remotive] Fetching... ')
+  const res = await fetch('https://remotive.com/api/remote-jobs?limit=100', { headers: { 'User-Agent': 'RemoteJobsPK/1.0' } })
   if (!res.ok) throw new Error(`Remotive HTTP ${res.status}`)
   const { jobs } = await res.json()
-
-  return jobs
-    .filter((j) => j.url)
-    .map((j) => ({
-      title: j.title,
-      company_name: j.company_name,
-      company_logo: j.company_logo_url || null,
-      company_website: j.company_url || null,
-      original_url: j.url,
-      tags: (j.tags ?? []).slice(0, 8),
-      category: j.category ?? '',
-      location: j.candidate_required_location ?? '',
-      salary_range: j.salary || null,
-      short_summary: stripHtml(j.description),
-      date_posted: j.publication_date?.split('T')[0] ?? null,
-      seniority: deriveSeniority(j.title),
-    }))
+  const out = jobs.filter((j) => j.url).map((j) => ({
+    _source: 'Remotive',
+    title: j.title,
+    company_name: j.company_name,
+    company_logo: j.company_logo_url || null,
+    company_website: j.company_url || null,
+    original_url: j.url,
+    tags: (j.tags ?? []).slice(0, 8),
+    api_category: j.category ?? '',
+    location: j.candidate_required_location ?? '',
+    salary_range: j.salary || null,
+    short_summary: stripHtml(j.description),
+    date_posted: j.publication_date?.split('T')[0] ?? null,
+    seniority: deriveSeniority(j.title),
+  }))
+  console.log(`${out.length} raw jobs`)
+  return out
 }
 
 async function fetchArbeitnow() {
-  console.log('Fetching Arbeitnow...')
-  const res = await fetch('https://www.arbeitnow.com/api/job-board-api', {
-    headers: { 'User-Agent': 'RemoteJobsPK/1.0' },
-  })
+  process.stdout.write('[Arbeitnow] Fetching... ')
+  const res = await fetch('https://www.arbeitnow.com/api/job-board-api', { headers: { 'User-Agent': 'RemoteJobsPK/1.0' } })
   if (!res.ok) throw new Error(`Arbeitnow HTTP ${res.status}`)
   const { data: jobs } = await res.json()
-
-  return jobs
-    .filter((j) => j.url && j.remote)
-    .map((j) => ({
-      title: j.title,
-      company_name: j.company_name,
-      company_logo: null,
-      company_website: null,
-      original_url: j.url,
-      tags: (j.tags ?? []).slice(0, 8),
-      category: (j.tags ?? []).join(' '),
-      location: '',
-      salary_range: null,
-      short_summary: stripHtml(j.description),
-      date_posted: j.created_at
-        ? new Date(j.created_at * 1000).toISOString().split('T')[0]
-        : null,
-      seniority: deriveSeniority(j.title),
-    }))
+  const out = jobs.filter((j) => j.url && j.remote).map((j) => ({
+    _source: 'Arbeitnow',
+    title: j.title,
+    company_name: j.company_name,
+    company_logo: null,
+    company_website: null,
+    original_url: j.url,
+    tags: (j.tags ?? []).slice(0, 8),
+    api_category: (j.tags ?? []).join(' '),
+    location: '',
+    salary_range: null,
+    short_summary: stripHtml(j.description),
+    date_posted: j.created_at ? new Date(j.created_at * 1000).toISOString().split('T')[0] : null,
+    seniority: deriveSeniority(j.title),
+  }))
+  console.log(`${out.length} raw jobs`)
+  return out
 }
 
 async function fetchRemoteOK() {
-  console.log('Fetching RemoteOK...')
-  const res = await fetch('https://remoteok.com/api', {
-    headers: { 'User-Agent': 'RemoteJobsPK/1.0 (remotejobs.pk)' },
-  })
+  process.stdout.write('[RemoteOK] Fetching... ')
+  const res = await fetch('https://remoteok.com/api', { headers: { 'User-Agent': 'RemoteJobsPK/1.0 (remotejobs.pk)' } })
   if (!res.ok) throw new Error(`RemoteOK HTTP ${res.status}`)
   const raw = await res.json()
+  const out = raw.slice(1).filter((j) => j.position && j.url).map((j) => ({
+    _source: 'RemoteOK',
+    title: j.position,
+    company_name: j.company,
+    company_logo: j.company_logo || null,
+    company_website: null,
+    original_url: j.url,
+    tags: (j.tags ?? []).slice(0, 8),
+    api_category: (j.tags ?? []).join(' '),
+    location: j.location ?? '',
+    salary_range: j.salary_min ? `$${Number(j.salary_min).toLocaleString()}–$${Number(j.salary_max).toLocaleString()}/yr` : null,
+    short_summary: stripHtml(j.description),
+    date_posted: j.date?.split('T')[0] ?? null,
+    seniority: deriveSeniority(j.position),
+  }))
+  console.log(`${out.length} raw jobs`)
+  return out
+}
 
-  return raw
-    .slice(1)
-    .filter((j) => j.position && j.url)
-    .map((j) => ({
-      title: j.position,
-      company_name: j.company,
-      company_logo: j.company_logo || null,
-      company_website: null,
-      original_url: j.url,
-      tags: (j.tags ?? []).slice(0, 8),
-      category: (j.tags ?? []).join(' '),
-      location: j.location ?? '',
-      salary_range: j.salary_min
-        ? `$${Number(j.salary_min).toLocaleString()}–$${Number(j.salary_max).toLocaleString()}/yr`
-        : null,
-      short_summary: stripHtml(j.description),
-      date_posted: j.date?.split('T')[0] ?? null,
-      seniority: deriveSeniority(j.position),
-    }))
+// ---------------------------------------------------------------------------
+// Sources — direct company boards (Greenhouse + Lever)
+// ---------------------------------------------------------------------------
+
+async function fetchGreenhouse() {
+  console.log(`[Greenhouse] Fetching ${GREENHOUSE_SLUGS.length} company boards...`)
+  const jobs = []
+  let done = 0
+
+  const NAME_MAP = {
+    canonical: 'Canonical', gitlab: 'GitLab', deel: 'Deel', zapier: 'Zapier',
+    automattic: 'Automattic', toptal: 'Toptal', buffer: 'Buffer', doist: 'Doist',
+    circle: 'Circle', hashicorp: 'HashiCorp', elastic: 'Elastic', netlify: 'Netlify',
+    cloudflare: 'Cloudflare', linear: 'Linear', notion: 'Notion', stripe: 'Stripe',
+    twilio: 'Twilio', sendgrid: 'SendGrid', hubspot: 'HubSpot', intercom: 'Intercom',
+  }
+
+  await Promise.allSettled(
+    GREENHOUSE_SLUGS.map(async (slug) => {
+      try {
+        const res = await fetch(
+          `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs?content=true`,
+          { headers: { 'User-Agent': 'RemoteJobsPK/1.0' }, signal: AbortSignal.timeout(10000) }
+        )
+        done++
+        const companyName = NAME_MAP[slug] ?? (slug.charAt(0).toUpperCase() + slug.slice(1))
+        if (!res.ok) {
+          process.stdout.write(`  [${done}/${GREENHOUSE_SLUGS.length}] ${companyName}: skipped (${res.status})\n`)
+          return
+        }
+        const { jobs: raw } = await res.json()
+        if (!Array.isArray(raw)) return
+        process.stdout.write(`  [${done}/${GREENHOUSE_SLUGS.length}] ${companyName}: ${raw.length} jobs\n`)
+
+        for (const j of raw) {
+          if (!j.absolute_url) continue
+          jobs.push({
+            _source: 'Greenhouse',
+            title: j.title ?? '',
+            company_name: companyName,
+            company_logo: null,
+            company_website: `https://${slug}.com`,
+            original_url: j.absolute_url,
+            tags: [],
+            api_category: j.departments?.map((d) => d.name).join(' ') ?? '',
+            location: j.location?.name ?? '',
+            salary_range: null,
+            short_summary: stripHtml(j.content ?? ''),
+            date_posted: j.updated_at?.split('T')[0] ?? null,
+            seniority: deriveSeniority(j.title ?? ''),
+          })
+        }
+      } catch (err) {
+        done++
+        const companyName = NAME_MAP[slug] ?? slug
+        process.stdout.write(`  [${done}/${GREENHOUSE_SLUGS.length}] ${companyName}: error (${err.message})\n`)
+      }
+    })
+  )
+
+  console.log(`[Greenhouse] Done — ${jobs.length} raw jobs total`)
+  return jobs
+}
+
+async function fetchLever() {
+  console.log(`[Lever] Fetching ${LEVER_SLUGS.length} company boards...`)
+  const jobs = []
+  let done = 0
+
+  const NAME_MAP = {
+    canonical: 'Canonical', deel: 'Deel', zapier: 'Zapier', buffer: 'Buffer',
+    doist: 'Doist', automattic: 'Automattic', toptal: 'Toptal', invision: 'InVision',
+    hotjar: 'Hotjar', remote: 'Remote.com', loom: 'Loom', pitch: 'Pitch',
+    miro: 'Miro', typeform: 'Typeform',
+  }
+
+  await Promise.allSettled(
+    LEVER_SLUGS.map(async (slug) => {
+      try {
+        const res = await fetch(
+          `https://api.lever.co/v0/postings/${slug}?mode=json`,
+          { headers: { 'User-Agent': 'RemoteJobsPK/1.0' }, signal: AbortSignal.timeout(10000) }
+        )
+        done++
+        const companyName = NAME_MAP[slug] ?? (slug.charAt(0).toUpperCase() + slug.slice(1))
+        if (!res.ok) {
+          process.stdout.write(`  [${done}/${LEVER_SLUGS.length}] ${companyName}: skipped (${res.status})\n`)
+          return
+        }
+        const raw = await res.json()
+        if (!Array.isArray(raw)) return
+        process.stdout.write(`  [${done}/${LEVER_SLUGS.length}] ${companyName}: ${raw.length} jobs\n`)
+
+        for (const j of raw) {
+          if (!j.hostedUrl) continue
+          const locationName = j.categories?.location ?? j.categories?.allLocations?.[0] ?? ''
+          const descText = [
+            j.descriptionPlain ?? '',
+            ...(j.lists ?? []).map((l) => `${l.text}: ${l.content}`),
+          ].join(' ')
+
+          jobs.push({
+            _source: 'Lever',
+            title: j.text ?? '',
+            company_name: companyName,
+            company_logo: null,
+            company_website: `https://${slug}.com`,
+            original_url: j.hostedUrl,
+            tags: j.tags ?? [],
+            api_category: [j.categories?.team, j.categories?.department].filter(Boolean).join(' '),
+            location: locationName,
+            salary_range: null,
+            short_summary: stripHtml(descText).slice(0, 500),
+            date_posted: j.createdAt ? new Date(j.createdAt).toISOString().split('T')[0] : null,
+            seniority: deriveSeniority(j.text ?? ''),
+          })
+        }
+      } catch (err) {
+        done++
+        const companyName = NAME_MAP[slug] ?? slug
+        process.stdout.write(`  [${done}/${LEVER_SLUGS.length}] ${companyName}: error (${err.message})\n`)
+      }
+    })
+  )
+
+  console.log(`[Lever] Done — ${jobs.length} raw jobs total`)
+  return jobs
 }
 
 // ---------------------------------------------------------------------------
@@ -301,101 +478,169 @@ async function fetchRemoteOK() {
 // ---------------------------------------------------------------------------
 
 async function ingest() {
-  // Load already-ingested URLs
-  const { data: existing } = await sb.from('listings').select('original_url')
-  const existingUrls = new Set((existing ?? []).map((r) => r.original_url))
-  console.log(`DB has ${existingUrls.size} listings already\n`)
+  // ── Optional wipe ─────────────────────────────────────────────────────────
+  if (WIPE) {
+    process.stdout.write('Wiping listings... ')
+    const { error: le } = await sb.from('listings').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+    if (le) { console.error('Failed:', le.message); process.exit(1) }
+    console.log('done')
 
-  // Fetch all sources
-  const results = await Promise.allSettled([
-    fetchRemotive(),
-    fetchArbeitnow(),
-    fetchRemoteOK(),
-  ])
+    process.stdout.write('Wiping companies... ')
+    const { error: ce } = await sb.from('companies').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+    if (ce) { console.error('Failed:', ce.message); process.exit(1) }
+    console.log('done\n')
+  }
 
-  const allJobs = results.flatMap((r, i) => {
-    const source = ['Remotive', 'Arbeitnow', 'RemoteOK'][i]
-    if (r.status === 'rejected') {
-      console.error(`${source} failed:`, r.reason.message)
-      return []
+  // ── Check existing ─────────────────────────────────────────────────────────
+  const { data: existingRows, error: existErr } = await sb.from('listings').select('original_url')
+  if (existErr) { console.error('Could not query listings:', existErr.message); process.exit(1) }
+  const existingUrls = new Set((existingRows ?? []).map((r) => r.original_url))
+
+  const { count: companyCount } = await sb.from('companies').select('*', { count: 'exact', head: true })
+  console.log(`DB state: ${existingUrls.size} listings, ${companyCount ?? '?'} companies\n`)
+
+  // ── Fetch all sources (sequentially to keep output readable) ──────────────
+  console.log('=== Fetching sources ===')
+  const sourceResults = {}
+
+  for (const [name, fn] of [
+    ['Remotive', fetchRemotive],
+    ['Arbeitnow', fetchArbeitnow],
+    ['RemoteOK', fetchRemoteOK],
+    ['Greenhouse', fetchGreenhouse],
+    ['Lever', fetchLever],
+  ]) {
+    try {
+      sourceResults[name] = await fn()
+    } catch (err) {
+      console.error(`[${name}] FAILED: ${err.message}`)
+      sourceResults[name] = []
     }
-    console.log(`${source}: ${r.value.length} raw jobs`)
-    return r.value
-  })
+  }
 
-  // Deduplicate by URL
+  const allJobs = Object.values(sourceResults).flat()
+  const rawBySource = Object.fromEntries(Object.entries(sourceResults).map(([k, v]) => [k, v.length]))
+
+  console.log(`\n=== Raw fetched ===`)
+  for (const [src, count] of Object.entries(rawBySource)) {
+    console.log(`  ${src.padEnd(12)} ${count}`)
+  }
+  console.log(`  ${'TOTAL'.padEnd(12)} ${allJobs.length}`)
+
+  // ── Deduplicate ────────────────────────────────────────────────────────────
   const seen = new Set(existingUrls)
   const newJobs = allJobs.filter((j) => {
     if (!j.original_url || seen.has(j.original_url)) return false
     seen.add(j.original_url)
     return true
   })
-  console.log(`\n${newJobs.length} new (not yet in DB)\n`)
+  console.log(`\n${newJobs.length} new (${allJobs.length - newJobs.length} already in DB or duplicate)\n`)
 
-  // ── Stage 1: Region filter ────────────────────────────────────────────────
-  const afterRegion = newJobs.filter((j) =>
-    passesRegionFilter(j.location, j.short_summary),
-  )
-  const regionRejected = newJobs.length - afterRegion.length
-  console.log(`Stage 1 (region):    ${afterRegion.length} pass, ${regionRejected} rejected`)
+  // ── Stage 1: Region ───────────────────────────────────────────────────────
+  console.log('=== Stage 1: Region filter ===')
+  const regionStats = { t1: 0, t2: 0, t3: 0, t4: 0, rejected: 0 }
+  const regionRejectedBySource = {}
+  const afterRegion = []
 
-  // ── Stage 2: Quality filter ───────────────────────────────────────────────
+  for (const j of newJobs) {
+    const result = classifyRegion(j.location)
+    if (!result) {
+      regionStats.rejected++
+      regionRejectedBySource[j._source] = (regionRejectedBySource[j._source] ?? 0) + 1
+      continue
+    }
+    j._regionTier = result.tier
+    j._regionNormalized = result.normalized
+    regionStats[`t${result.tier}`]++
+    afterRegion.push(j)
+  }
+
+  console.log(`  Pass: ${afterRegion.length}  Rejected: ${regionStats.rejected}`)
+  console.log(`  Tier breakdown → T1 Worldwide: ${regionStats.t1} | T2 Pakistan: ${regionStats.t2} | T3 EMEA/APAC: ${regionStats.t3} | T4 Visa: ${regionStats.t4}`)
+  for (const [src, n] of Object.entries(regionRejectedBySource)) {
+    console.log(`  Region-rejected from ${src}: ${n}`)
+  }
+
+  // ── Stage 2: Category ─────────────────────────────────────────────────────
+  console.log('\n=== Stage 2: Category filter ===')
   const include = []
   const borderline = []
-  const qualityRejected = { count: 0 }
+  let categoryRejected = 0
+  const catRejectedBySource = {}
 
   for (const j of afterRegion) {
-    const verdict = qualityPass(j.title, j.tags, j.category)
+    const verdict = classifyCategory(j.title, j.tags, j.api_category)
     if (verdict === 'include') include.push(j)
     else if (verdict === 'borderline') borderline.push(j)
-    else qualityRejected.count++
+    else {
+      categoryRejected++
+      catRejectedBySource[j._source] = (catRejectedBySource[j._source] ?? 0) + 1
+    }
   }
-  console.log(
-    `Stage 2 (quality):   ${include.length} include, ${borderline.length} borderline, ${qualityRejected.count} rejected`,
-  )
+  console.log(`  Include: ${include.length}  Borderline: ${borderline.length}  Rejected: ${categoryRejected}`)
+  for (const [src, n] of Object.entries(catRejectedBySource)) {
+    console.log(`  Category-rejected from ${src}: ${n}`)
+  }
 
-  // ── Stage 3: Claude pass on borderline ───────────────────────────────────
+  // ── Stage 3: Claude ───────────────────────────────────────────────────────
   let claudeIncluded = 0
   let claudeExcluded = 0
 
   if (borderline.length > 0) {
+    console.log(`\n=== Stage 3: Claude adjudication (${borderline.length} borderline) ===`)
     if (!anthropic) {
-      console.log(`Stage 3 (Claude):    skipped (no ANTHROPIC_API_KEY) — ${borderline.length} borderline listings included by default`)
-      include.push(...borderline)
+      console.log(`  Skipped — no ANTHROPIC_API_KEY. All ${borderline.length} borderline listings excluded.`)
+      claudeExcluded = borderline.length
     } else {
-      console.log(`\nStage 3 (Claude):    classifying ${borderline.length} borderline listings...`)
-      for (const j of borderline) {
+      for (let i = 0; i < borderline.length; i++) {
+        const j = borderline[i]
+        process.stdout.write(`  [${i + 1}/${borderline.length}] ${j.title.slice(0, 50).padEnd(50)} `)
         const verdict = await claudeClassify({
           title: j.title,
           company_name: j.company_name,
-          region: normalizeRegion(j.location),
+          region: j._regionNormalized,
           tags: j.tags,
           short_summary: j.short_summary,
         })
-        if (verdict === 'include') {
-          include.push(j)
-          claudeIncluded++
-        } else {
-          claudeExcluded++
-        }
+        console.log(verdict)
+        if (verdict === 'include') { include.push(j); claudeIncluded++ }
+        else claudeExcluded++
       }
-      console.log(`  Claude: ${claudeIncluded} included, ${claudeExcluded} excluded`)
+      console.log(`  Claude result: ${claudeIncluded} included, ${claudeExcluded} excluded`)
     }
   }
 
-  const totalRejected = regionRejected + qualityRejected.count + claudeExcluded
-  console.log(`\nFinal: ${include.length} to insert, ${totalRejected} total rejected`)
+  // ── Summary before insert ─────────────────────────────────────────────────
+  const totalRejected = regionStats.rejected + categoryRejected + claudeExcluded
+  console.log(`\n=== Pre-insert summary ===`)
+  console.log(`  Raw fetched:       ${allJobs.length}`)
+  console.log(`  New (deduped):     ${newJobs.length}`)
+  console.log(`  Region rejected:   ${regionStats.rejected}`)
+  console.log(`  Category rejected: ${categoryRejected}`)
+  console.log(`  Claude adjud:      ${borderline.length} sent → ${claudeIncluded} in, ${claudeExcluded} out`)
+  console.log(`  Total to insert:   ${include.length}`)
+  console.log(`  Total rejected:    ${totalRejected}`)
 
-  if (include.length === 0) {
-    console.log('Nothing to insert.')
-    return
+  // Per-source raw counts
+  console.log(`\n  Per-source raw:`)
+  for (const [src, count] of Object.entries(rawBySource)) {
+    console.log(`    ${src.padEnd(12)} ${count}`)
   }
 
+  if (include.length === 0) { console.log('\nNothing to insert.'); return }
+
   // ── Insert ────────────────────────────────────────────────────────────────
+  console.log(`\n=== Inserting ${include.length} listings ===`)
   let inserted = 0
   let failed = 0
+  const insertedListings = []
 
-  for (const job of include) {
+  for (let i = 0; i < include.length; i++) {
+    const job = include[i]
+    if ((i + 1) % 10 === 0 || i === 0) {
+      console.log(`  [${i + 1}/${include.length}] inserting...`)
+    }
+
     const company_id = await upsertCompany({
       name: job.company_name,
       logo_url: job.company_logo,
@@ -407,7 +652,7 @@ async function ingest() {
       title: job.title,
       seniority: job.seniority,
       location_type: 'remote',
-      region_eligibility: normalizeRegion(job.location),
+      region_eligibility: job._regionNormalized,
       tags: job.tags,
       salary_range: job.salary_range,
       short_summary: job.short_summary || 'No description available.',
@@ -424,12 +669,27 @@ async function ingest() {
       failed++
     } else {
       inserted++
-      if (inserted % 10 === 0) process.stdout.write(`  ${inserted} inserted...\n`)
+      insertedListings.push({ title: job.title, company: job.company_name, tier: job._regionTier, region: job._regionNormalized, source: job._source })
     }
   }
 
-  console.log(`\nDone. Inserted: ${inserted}, Failed: ${failed}`)
-  console.log(`Rejection breakdown: ${regionRejected} region | ${qualityRejected.count} quality keywords | ${claudeExcluded} Claude`)
+  // ── Final report ──────────────────────────────────────────────────────────
+  console.log(`\n=== FINAL REPORT ===`)
+  console.log(`Per-source raw fetched:`)
+  for (const [src, count] of Object.entries(rawBySource)) {
+    console.log(`  ${src.padEnd(12)} ${count} raw`)
+  }
+  console.log(`\nFilter pipeline:`)
+  console.log(`  Region rejected:   ${regionStats.rejected}`)
+  console.log(`  Category rejected: ${categoryRejected}`)
+  console.log(`  Claude sent:       ${borderline.length}  (included: ${claudeIncluded}, excluded: ${claudeExcluded})`)
+  console.log(`\nDB outcome:`)
+  console.log(`  Inserted: ${inserted}`)
+  console.log(`  Failed:   ${failed}`)
+  console.log(`\nInserted listings:`)
+  insertedListings.forEach((l, i) =>
+    console.log(`  ${String(i + 1).padStart(3)}. [T${l.tier}][${l.source.padEnd(10)}] ${l.title.slice(0, 45).padEnd(45)} @ ${l.company} (${l.region})`)
+  )
 }
 
 ingest().catch(console.error)
