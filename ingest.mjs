@@ -1,15 +1,19 @@
 /**
- * Ingestion pipeline — Remotive, Arbeitnow, RemoteOK, Greenhouse, Lever
+ * Ingestion pipeline — Remotive, Arbeitnow, RemoteOK, Himalayas, WorkingNomads,
+ *                      Greenhouse, Lever
  *
- * Three-stage filter:
- *   1. Region filter   — 4-tier priority system (see classifyRegion)
- *                        Tier 3 approved: EMEA and APAC only.
- *                        Plain "Europe" / continent names alone → REJECT.
- *                        Reject: single-country restrictions (not Pakistan)
- *   2. Category filter — EXACTLY 6 allowed: Sales, Marketing, Software Dev,
- *                        HR, Legal, Finance. Everything else rejected.
- *   3. Claude pass     — borderline listings sent to claude-haiku with the
- *                        same 6-category + region rule as explicit instruction.
+ * Four-stage filter:
+ *   0. Language filter  — reject non-English titles/descriptions
+ *   1. Region filter    — 4-tier priority system (see classifyRegion)
+ *                         Tier 1: Worldwide / Anywhere (no restriction)
+ *                         Tier 3 approved: EMEA and APAC only.
+ *                         Plain "Europe" / continent names alone → REJECT.
+ *                         Single-country restrictions → REJECT.
+ *                         Timezone-restricted descriptions → borderline (Claude)
+ *   2. Category filter  — EXACTLY 6 allowed: Sales, Marketing, Software Dev,
+ *                         HR, Legal, Finance. Everything else rejected.
+ *   3. Claude pass      — borderline listings sent to claude-haiku with the
+ *                         same 6-category + region rule as explicit instruction.
  *
  * Usage: ANTHROPIC_API_KEY=sk-... node ingest.mjs [--wipe]
  *   --wipe  Delete all rows from listings and companies before ingesting.
@@ -40,19 +44,107 @@ const WIPE = process.argv.includes('--wipe')
 // ---------------------------------------------------------------------------
 
 const GREENHOUSE_SLUGS = [
-  // confirmed responding (sorted by job count)
-  'stripe', 'anthropic', 'datadog', 'mongodb', 'okta',
-  'canonical', 'cloudflare', 'elastic', 'gitlab', 'coinbase',
-  'figma', 'twilio', 'asana', 'robinhood', 'intercom',
-  'postman', 'gusto', 'vercel', 'checkr', 'dropbox',
-  'pagerduty', 'airtable', 'contentful', 'lattice', 'remote',
-  'netlify',
+  // Infrastructure / Cloud
+  'stripe', 'datadog', 'mongodb', 'okta', 'canonical', 'cloudflare', 'elastic',
+  'hashicorp', 'digitalocean', 'netlify', 'vercel', 'grafana', 'sentry',
+  'confluent', 'cockroachdb', 'fastly', 'influxdata', 'newrelic',
+
+  // Software / Dev tools
+  'anthropic', 'gitlab', 'coinbase', 'figma', 'twilio', 'postman', 'dropbox',
+  'airtable', 'contentful', 'sourcegraph', 'posthog', 'linear', 'algolia',
+  'loom', 'squarespace', 'shopify', 'replit', 'crowdin', 'lokalise', 'miro',
+  'webflow', 'coda', 'invision',
+
+  // Data / Analytics / ML
+  'databricks', 'airbyte', 'fivetran', 'hightouch', 'prefect', 'temporal',
+
+  // Sales / Marketing / CRM
+  'hubspot', 'zendesk', 'intercom', 'outreach', 'gong', 'salesloft', 'apollo',
+  'pipedrive', 'klaviyo', 'braze', 'amplitude',
+  'hootsuite', 'sproutsocial', 'iterable', 'activecampaign', 'drift',
+  'aircall', 'pandadoc', 'sendbird', 'helpscout', 'close',
+
+  // HR / People Ops
+  'remote', 'deel', 'rippling', 'lattice', 'gusto', 'checkr',
+  'personio', '15five', 'cultureamp', 'hibob',
+
+  // Legal
+  'ironclad', 'clio',
+
+  // Finance
+  'brex', 'robinhood', 'paddle', 'xero', 'chargebee', 'plaid',
+  'nubank', 'wise', 'carta', 'pilot',
+
+  // General / Other
+  'asana', 'pagerduty', '1password', 'notion', 'scale',
+  'freshworks', 'pluralsight',
 ]
 
 const LEVER_SLUGS = [
-  // confirmed responding
-  'toptal',
+  'toptal', 'canonical', 'zapier', 'buffer', 'doist', 'automattic',
+  'hotjar', 'pitch', 'typeform', 'whereby', 'convertkit',
+  'deel', 'remote', 'oyster', 'loom',
+  // New additions
+  'duckduckgo', 'wikimedia', 'close', 'helpscout', 'percona',
+  'invision', 'dbt-labs', 'turing',
 ]
+
+// ---------------------------------------------------------------------------
+// Stage 0 — Language filter (English only)
+//
+// Reject listings where the title or description is not in English.
+// Uses character-level heuristics — no external library required.
+// ---------------------------------------------------------------------------
+
+// Characters specific to non-English European languages (ä ö ü ß etc.)
+const NON_ENGLISH_CHARS_RE = /[äöüßÄÖÜàáâãçèéêëìíîïñòóôõùúûýœæøšžÀÁÂÃÇÈÉÊËÌÍÎÏÑÒÓÔÕÙÚÛÝŒÆØŠŽ]/g
+
+// Non-Latin script characters: CJK (Chinese/Japanese/Korean), Arabic, Cyrillic, Hebrew, Thai, etc.
+// Any occurrence in the title, or 2+ in the description → reject immediately.
+const NON_LATIN_SCRIPT_RE = /[\u0400-\u04FF\u0600-\u06FF\u0900-\u097F\u3000-\u9FFF\uAC00-\uD7AF\u0E00-\u0E7F\u1100-\u11FF\u4E00-\u9FFF\u3040-\u30FF]/g
+
+// German signal words — expanded list, threshold lowered to 2 matches
+const GERMAN_SIGNALS_RE = /\b(und|für|mit|der|die|das|wir|sind|werden|einem|einer|unsere|oder|haben|können|ist|des|dem|den|von|als|auf|bei|nach|nicht|auch|noch|aber|wenn|dann|über|gegen|ohne|sein|ihre?|uns|zum|zur|eine|kein|nur|sehr|alle|diese|dieser|diesem|diesen|dass|damit|sowie|sowohl|jedoch|daher|welche|welches|bitte|bewirb|dich|bewerbung|stelle|stellenanzeige|aufgaben|anforderungen|qualifikationen|gehalt|vollzeit|teilzeit|festanstellung|erfahrung|kenntnisse|unternehmen|gesellschaft|bereich|entwicklung|vertrieb|kunden|lösung|projekt|anstellung|standort|suchen|bieten|gesucht|arbeiten|gestalten|deutschkenntnisse|berufserfahrung|willkommen)\b/gi
+
+// French signal words — clearly non-English terms (accented French words are caught by NON_ENGLISH_CHARS_RE)
+const FRENCH_SIGNALS_RE = /\b(vous|votre|notre|avec|pour|dans|rejoignez|postulez|recherchons|contrat|candidature|travail|rejoindre)\b/gi
+
+// Dutch signal words — clearly non-English terms
+const DUTCH_SIGNALS_RE = /\b(wij|jij|bij|zijn|worden|hebben|ook|maar|niet|naar|zoeken|werken|vacature|werkgever|solliciteer|bedrijf|ervaring|salaris|functie|stellen)\b/gi
+
+/**
+ * Returns true if the combined title + description appears to be English.
+ * 2+ non-English European chars → reject.
+ * 2+ German signal words → reject (stricter than before).
+ * 3+ French signal words → reject.
+ * 3+ Dutch signal words → reject.
+ * Samples up to 1500 chars of description for better coverage.
+ */
+function isEnglish(title, description) {
+  const sample = `${title} ${(description ?? '').slice(0, 1500)}`
+
+  // Any non-Latin script character in the title → reject (Japanese, Arabic, Cyrillic, etc.)
+  if (NON_LATIN_SCRIPT_RE.test(title)) return false
+  NON_LATIN_SCRIPT_RE.lastIndex = 0 // reset global regex state
+
+  // 2+ non-Latin script chars anywhere in sample → reject
+  const nonLatinChars = sample.match(NON_LATIN_SCRIPT_RE) ?? []
+  if (nonLatinChars.length >= 2) return false
+
+  const nonEnglishChars = sample.match(NON_ENGLISH_CHARS_RE) ?? []
+  if (nonEnglishChars.length >= 2) return false
+
+  const germanSignals = sample.match(GERMAN_SIGNALS_RE) ?? []
+  if (germanSignals.length >= 2) return false
+
+  const frenchSignals = sample.match(FRENCH_SIGNALS_RE) ?? []
+  if (frenchSignals.length >= 3) return false
+
+  const dutchSignals = sample.match(DUTCH_SIGNALS_RE) ?? []
+  if (dutchSignals.length >= 3) return false
+
+  return true
+}
 
 // ---------------------------------------------------------------------------
 // Stage 1 — Region filter (4-tier)
@@ -78,6 +170,7 @@ const SINGLE_COUNTRIES = [
   'vietnam', 'greece', 'hungary', 'bulgaria', 'croatia',
   'serbia', 'slovakia', 'slovenia', 'latvia', 'estonia',
   'lithuania', 'cyprus', 'malta', 'egypt', 'kenya', 'nigeria',
+  'argentina', 'colombia', 'chile', 'peru', 'ecuador',
 ]
 
 /**
@@ -91,7 +184,7 @@ function classifyRegion(location) {
   const l = raw.toLowerCase()
 
   // Tier 1 — Worldwide
-  if (/worldwide|global|anywhere|international|no location restriction|location independent|work from anywhere|\bwfa\b|all countries|fully remote|any country/.test(l)) {
+  if (/worldwide|global|anywhere|international|no location restriction|open globally|location independent|work from anywhere|\bwfa\b|all countries|fully remote|any country|no geographic restriction/.test(l)) {
     return { tier: 1, normalized: 'Worldwide' }
   }
 
@@ -127,6 +220,14 @@ function classifyRegion(location) {
 
   // Ambiguous / specific city / plain continent name — reject
   return null
+}
+
+// Timezone restriction detection — descriptions requiring overlap with a
+// specific timezone are borderline (sent to Claude) rather than auto-included.
+const TIMEZONE_RESTRICTION_RE = /\b(must|required?|need(ed)?|expect(ed)?|preference for|mandatory)\b.{0,100}\b(EST|CST|MST|PST|CET|CEST|AEST|IST|JST|GMT[-+]\d|eastern|pacific|central|mountain)\b.{0,50}\b(time\s*zone|timezone|hours?|overlap|availability)\b|\b(EST|CST|MST|PST|CET|CEST|AEST)\b.{0,80}\b(required?|mandatory|preferred?|must|need(ed)?)\b|\bUS\s+(?:business\s+)?hours?\s+(?:required?|preferred?|mandatory|only)\b|\bEastern\s+time(?:\s+zone)?\s+(?:required?|preferred?|mandatory)\b/i
+
+function hasTimezoneRestriction(description) {
+  return TIMEZONE_RESTRICTION_RE.test(description ?? '')
 }
 
 // ---------------------------------------------------------------------------
@@ -195,7 +296,7 @@ INCLUDE only if BOTH conditions are true:
    • Worldwide / Anywhere / Fully Remote (no country restriction)
    • Explicitly names Pakistan or South Asia as eligible
    • Broad multi-country region: EMEA or APAC specifically (not plain "Europe" or "Asia" alone)
-   Do NOT include: roles restricted to a single country other than Pakistan (e.g. "Remote - UK", "US only", "must be based in Germany"), or plain continent labels like "Europe (Remote)" without EMEA/APAC framing.
+   Do NOT include: roles restricted to a single country other than Pakistan (e.g. "Remote - UK", "US only", "must be based in Germany"), or plain continent labels like "Europe (Remote)" without EMEA/APAC framing. Also EXCLUDE if the description requires working specific hours in a timezone that effectively excludes Pakistani candidates (e.g. "must be available 9am-5pm EST", "US business hours required").
 
 Title: ${listing.title}
 Category/Tags: ${(listing.tags ?? []).join(', ')}
@@ -276,7 +377,7 @@ async function upsertCompany({ name, logo_url, website }) {
 
 async function fetchRemotive() {
   process.stdout.write('[Remotive] Fetching... ')
-  const res = await fetch('https://remotive.com/api/remote-jobs?limit=100', { headers: { 'User-Agent': 'RemoteJobsPK/1.0' } })
+  const res = await fetch('https://remotive.com/api/remote-jobs?limit=300', { headers: { 'User-Agent': 'RemoteJobsPK/1.0' } })
   if (!res.ok) throw new Error(`Remotive HTTP ${res.status}`)
   const { jobs } = await res.json()
   const out = jobs.filter((j) => j.url).map((j) => ({
@@ -299,27 +400,45 @@ async function fetchRemotive() {
 }
 
 async function fetchArbeitnow() {
-  process.stdout.write('[Arbeitnow] Fetching... ')
-  const res = await fetch('https://www.arbeitnow.com/api/job-board-api', { headers: { 'User-Agent': 'RemoteJobsPK/1.0' } })
-  if (!res.ok) throw new Error(`Arbeitnow HTTP ${res.status}`)
-  const { data: jobs } = await res.json()
-  const out = jobs.filter((j) => j.url && j.remote).map((j) => ({
-    _source: 'Arbeitnow',
-    title: j.title,
-    company_name: j.company_name,
-    company_logo: null,
-    company_website: null,
-    original_url: j.url,
-    tags: (j.tags ?? []).slice(0, 8),
-    api_category: (j.tags ?? []).join(' '),
-    location: '',
-    salary_range: null,
-    short_summary: stripHtml(j.description),
-    date_posted: j.created_at ? new Date(j.created_at * 1000).toISOString().split('T')[0] : null,
-    seniority: deriveSeniority(j.title),
-  }))
-  console.log(`${out.length} raw jobs`)
-  return out
+  console.log('[Arbeitnow] Fetching (8 pages)...')
+  const pages = [1, 2, 3, 4, 5, 6, 7, 8]
+  const allJobs = []
+
+  for (const page of pages) {
+    try {
+      process.stdout.write(`  Page ${page}... `)
+      const res = await fetch(
+        `https://www.arbeitnow.com/api/job-board-api?page=${page}`,
+        { headers: { 'User-Agent': 'RemoteJobsPK/1.0' }, signal: AbortSignal.timeout(10000) }
+      )
+      if (!res.ok) { console.log(`HTTP ${res.status} — stopping`); break }
+      const { data: jobs } = await res.json()
+      if (!Array.isArray(jobs) || jobs.length === 0) { console.log('no jobs — stopping'); break }
+      const remote = jobs.filter((j) => j.url && j.remote).map((j) => ({
+        _source: 'Arbeitnow',
+        title: j.title,
+        company_name: j.company_name,
+        company_logo: null,
+        company_website: null,
+        original_url: j.url,
+        tags: (j.tags ?? []).slice(0, 8),
+        api_category: (j.tags ?? []).join(' '),
+        location: '',
+        salary_range: null,
+        short_summary: stripHtml(j.description),
+        date_posted: j.created_at ? new Date(j.created_at * 1000).toISOString().split('T')[0] : null,
+        seniority: deriveSeniority(j.title),
+      }))
+      console.log(`${remote.length} remote jobs`)
+      allJobs.push(...remote)
+    } catch (err) {
+      console.log(`error (${err.message}) — stopping`)
+      break
+    }
+  }
+
+  console.log(`[Arbeitnow] Done — ${allJobs.length} raw jobs total`)
+  return allJobs
 }
 
 async function fetchRemoteOK() {
@@ -346,6 +465,107 @@ async function fetchRemoteOK() {
   return out
 }
 
+async function fetchHimalayas() {
+  process.stdout.write('[Himalayas] Fetching... ')
+  try {
+    const res = await fetch(
+      'https://himalayas.app/jobs/api?limit=300',
+      { headers: { 'User-Agent': 'RemoteJobsPK/1.0' }, signal: AbortSignal.timeout(15000) }
+    )
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const body = await res.json()
+    const jobs = body.jobs ?? body ?? []
+    if (!Array.isArray(jobs)) throw new Error('Unexpected response shape')
+    const out = jobs.filter((j) => j.applicationLink || j.url).map((j) => ({
+      _source: 'Himalayas',
+      title: j.title ?? '',
+      company_name: j.company?.name ?? j.companyName ?? 'Unknown',
+      company_logo: j.company?.logo ?? j.companyLogo ?? null,
+      company_website: j.company?.website ?? j.companyWebsite ?? null,
+      original_url: j.applicationLink ?? j.url,
+      tags: (j.tags ?? j.categories ?? []).slice(0, 8),
+      api_category: (j.categories ?? []).join(' '),
+      location: j.location ?? j.regions ?? '',
+      salary_range: j.salary ?? null,
+      short_summary: stripHtml(j.shortDescription ?? j.description ?? ''),
+      date_posted: j.publishedAt ? j.publishedAt.split('T')[0] : null,
+      seniority: deriveSeniority(j.title ?? ''),
+    }))
+    console.log(`${out.length} raw jobs`)
+    return out
+  } catch (err) {
+    console.log(`FAILED (${err.message}) — skipping`)
+    return []
+  }
+}
+
+async function fetchWorkingNomads() {
+  process.stdout.write('[WorkingNomads] Fetching... ')
+  try {
+    const res = await fetch(
+      'https://www.workingnomads.com/api/exposed_jobs/',
+      { headers: { 'User-Agent': 'RemoteJobsPK/1.0' }, signal: AbortSignal.timeout(15000) }
+    )
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const jobs = await res.json()
+    if (!Array.isArray(jobs)) throw new Error('Unexpected response shape')
+    const out = jobs.filter((j) => j.url).map((j) => ({
+      _source: 'WorkingNomads',
+      title: j.title ?? '',
+      company_name: j.company ?? 'Unknown',
+      company_logo: j.company_logo_url ?? null,
+      company_website: null,
+      original_url: j.url,
+      tags: [],
+      api_category: j.category?.name ?? '',
+      location: j.region ?? j.location ?? '',
+      salary_range: j.salary || null,
+      short_summary: stripHtml(j.description ?? ''),
+      date_posted: j.pub_date ? j.pub_date.split('T')[0] : null,
+      seniority: deriveSeniority(j.title ?? ''),
+    }))
+    console.log(`${out.length} raw jobs`)
+    return out
+  } catch (err) {
+    console.log(`FAILED (${err.message}) — skipping`)
+    return []
+  }
+}
+
+async function fetchJobicy() {
+  process.stdout.write('[Jobicy] Fetching... ')
+  try {
+    const res = await fetch(
+      'https://jobicy.com/api/v2/remote-jobs?count=50',
+      { headers: { 'User-Agent': 'RemoteJobsPK/1.0' }, signal: AbortSignal.timeout(15000) }
+    )
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const body = await res.json()
+    const jobs = body.jobs ?? body ?? []
+    if (!Array.isArray(jobs)) throw new Error('Unexpected response shape')
+    const out = jobs.filter((j) => j.url).map((j) => ({
+      _source: 'Jobicy',
+      title: j.jobTitle ?? j.title ?? '',
+      company_name: j.companyName ?? j.company ?? 'Unknown',
+      company_logo: j.companyLogo ?? j.company_logo ?? null,
+      company_website: j.companyUrl ?? null,
+      original_url: j.url,
+      tags: [...(j.jobIndustry ?? []), ...(j.jobType ?? [])].slice(0, 8),
+      api_category: (j.jobIndustry ?? []).join(' '),
+      location: j.jobGeo ?? j.location ?? '',
+      salary_range: null,
+      short_summary: stripHtml(j.jobExcerpt ?? j.description ?? ''),
+      date_posted: j.pubDate ? j.pubDate.split(' ')[0] : null,
+      seniority: deriveSeniority(j.jobTitle ?? j.title ?? ''),
+    }))
+    console.log(`${out.length} raw jobs`)
+    return out
+  } catch (err) {
+    console.log(`FAILED (${err.message}) — skipping`)
+    return []
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Sources — direct company boards (Greenhouse + Lever)
 // ---------------------------------------------------------------------------
@@ -363,6 +583,29 @@ async function fetchGreenhouse() {
     gusto: 'Gusto', vercel: 'Vercel', checkr: 'Checkr', dropbox: 'Dropbox',
     pagerduty: 'PagerDuty', airtable: 'Airtable', contentful: 'Contentful',
     lattice: 'Lattice', remote: 'Remote.com', netlify: 'Netlify',
+    hashicorp: 'HashiCorp', mozilla: 'Mozilla', digitalocean: 'DigitalOcean',
+    sentry: 'Sentry', grafana: 'Grafana Labs', sourcegraph: 'Sourcegraph',
+    posthog: 'PostHog', algolia: 'Algolia', amplitude: 'Amplitude',
+    braze: 'Braze', hubspot: 'HubSpot', zendesk: 'Zendesk',
+    outreach: 'Outreach', gong: 'Gong', salesloft: 'Salesloft', apollo: 'Apollo.io',
+    pipedrive: 'Pipedrive', klaviyo: 'Klaviyo', deel: 'Deel', rippling: 'Rippling',
+    brex: 'Brex', scale: 'Scale AI', squarespace: 'Squarespace', shopify: 'Shopify',
+    loom: 'Loom', linear: 'Linear', '1password': '1Password', crowdin: 'Crowdin',
+    lokalise: 'Lokalise', miro: 'Miro', notion: 'Notion', replit: 'Replit',
+    // New additions
+    confluent: 'Confluent', cockroachdb: 'CockroachDB', fastly: 'Fastly',
+    influxdata: 'InfluxData', newrelic: 'New Relic',
+    databricks: 'Databricks', airbyte: 'Airbyte', fivetran: 'Fivetran',
+    hightouch: 'Hightouch', prefect: 'Prefect', temporal: 'Temporal Technologies',
+    webflow: 'Webflow', coda: 'Coda', invision: 'InVision',
+    hootsuite: 'Hootsuite', sproutsocial: 'Sprout Social', iterable: 'Iterable',
+    activecampaign: 'ActiveCampaign', drift: 'Drift', aircall: 'Aircall',
+    pandadoc: 'PandaDoc', sendbird: 'SendBird', helpscout: 'Help Scout', close: 'Close',
+    personio: 'Personio', '15five': '15Five', cultureamp: 'Culture Amp', hibob: 'HiBob',
+    ironclad: 'Ironclad', clio: 'Clio',
+    paddle: 'Paddle', xero: 'Xero', chargebee: 'Chargebee', plaid: 'Plaid',
+    nubank: 'Nubank', wise: 'Wise', carta: 'Carta', pilot: 'Pilot',
+    freshworks: 'Freshworks', pluralsight: 'Pluralsight',
   }
 
   await Promise.allSettled(
@@ -421,7 +664,12 @@ async function fetchLever() {
     canonical: 'Canonical', deel: 'Deel', zapier: 'Zapier', buffer: 'Buffer',
     doist: 'Doist', automattic: 'Automattic', toptal: 'Toptal', invision: 'InVision',
     hotjar: 'Hotjar', remote: 'Remote.com', loom: 'Loom', pitch: 'Pitch',
-    miro: 'Miro', typeform: 'Typeform',
+    miro: 'Miro', typeform: 'Typeform', whereby: 'Whereby', convertkit: 'ConvertKit',
+    oyster: 'Oyster HR',
+    // New additions
+    duckduckgo: 'DuckDuckGo', wikimedia: 'Wikimedia Foundation',
+    close: 'Close', helpscout: 'Help Scout', percona: 'Percona',
+    'dbt-labs': 'dbt Labs', turing: 'Turing',
   }
 
   await Promise.allSettled(
@@ -511,6 +759,9 @@ async function ingest() {
     ['Remotive', fetchRemotive],
     ['Arbeitnow', fetchArbeitnow],
     ['RemoteOK', fetchRemoteOK],
+    ['Himalayas', fetchHimalayas],
+    ['WorkingNomads', fetchWorkingNomads],
+    ['Jobicy', fetchJobicy],
     ['Greenhouse', fetchGreenhouse],
     ['Lever', fetchLever],
   ]) {
@@ -527,9 +778,9 @@ async function ingest() {
 
   console.log(`\n=== Raw fetched ===`)
   for (const [src, count] of Object.entries(rawBySource)) {
-    console.log(`  ${src.padEnd(12)} ${count}`)
+    console.log(`  ${src.padEnd(14)} ${count}`)
   }
-  console.log(`  ${'TOTAL'.padEnd(12)} ${allJobs.length}`)
+  console.log(`  ${'TOTAL'.padEnd(14)} ${allJobs.length}`)
 
   // ── Deduplicate ────────────────────────────────────────────────────────────
   const seen = new Set(existingUrls)
@@ -540,13 +791,34 @@ async function ingest() {
   })
   console.log(`\n${newJobs.length} new (${allJobs.length - newJobs.length} already in DB or duplicate)\n`)
 
-  // ── Stage 1: Region ───────────────────────────────────────────────────────
-  console.log('=== Stage 1: Region filter ===')
-  const regionStats = { t1: 0, t2: 0, t3: 0, t4: 0, rejected: 0 }
-  const regionRejectedBySource = {}
-  const afterRegion = []
+  // ── Stage 0: Language filter ───────────────────────────────────────────────
+  console.log('=== Stage 0: Language filter ===')
+  const langRejected = { total: 0 }
+  const langRejectedBySource = {}
+  const afterLanguage = []
 
   for (const j of newJobs) {
+    if (!isEnglish(j.title, j.short_summary)) {
+      langRejected.total++
+      langRejectedBySource[j._source] = (langRejectedBySource[j._source] ?? 0) + 1
+      continue
+    }
+    afterLanguage.push(j)
+  }
+
+  console.log(`  Pass: ${afterLanguage.length}  Rejected (non-English): ${langRejected.total}`)
+  for (const [src, n] of Object.entries(langRejectedBySource)) {
+    console.log(`  Language-rejected from ${src}: ${n}`)
+  }
+
+  // ── Stage 1: Region ───────────────────────────────────────────────────────
+  console.log('\n=== Stage 1: Region filter ===')
+  const regionStats = { t1: 0, t2: 0, t3: 0, t4: 0, rejected: 0, tzBorderline: 0 }
+  const regionRejectedBySource = {}
+  const afterRegion = []
+  const timezoneBorderline = []
+
+  for (const j of afterLanguage) {
     const result = classifyRegion(j.location)
     if (!result) {
       regionStats.rejected++
@@ -556,10 +828,18 @@ async function ingest() {
     j._regionTier = result.tier
     j._regionNormalized = result.normalized
     regionStats[`t${result.tier}`]++
-    afterRegion.push(j)
+
+    // Timezone restriction in description → borderline for Claude adjudication
+    if (result.tier === 1 && hasTimezoneRestriction(j.short_summary)) {
+      regionStats.tzBorderline++
+      j._tzFlagged = true
+      timezoneBorderline.push(j)
+    } else {
+      afterRegion.push(j)
+    }
   }
 
-  console.log(`  Pass: ${afterRegion.length}  Rejected: ${regionStats.rejected}`)
+  console.log(`  Pass: ${afterRegion.length}  TZ-borderline: ${timezoneBorderline.length}  Rejected: ${regionStats.rejected}`)
   console.log(`  Tier breakdown → T1 Worldwide: ${regionStats.t1} | T2 Pakistan: ${regionStats.t2} | T3 EMEA/APAC: ${regionStats.t3} | T4 Visa: ${regionStats.t4}`)
   for (const [src, n] of Object.entries(regionRejectedBySource)) {
     console.log(`  Region-rejected from ${src}: ${n}`)
@@ -572,6 +852,7 @@ async function ingest() {
   let categoryRejected = 0
   const catRejectedBySource = {}
 
+  // Process region-passed jobs through category filter
   for (const j of afterRegion) {
     const verdict = classifyCategory(j.title, j.tags, j.api_category)
     if (verdict === 'include') include.push(j)
@@ -581,6 +862,17 @@ async function ingest() {
       catRejectedBySource[j._source] = (catRejectedBySource[j._source] ?? 0) + 1
     }
   }
+
+  // TZ-flagged jobs also go through category filter first, then to Claude
+  for (const j of timezoneBorderline) {
+    const verdict = classifyCategory(j.title, j.tags, j.api_category)
+    if (verdict === 'include' || verdict === 'borderline') borderline.push(j) // Claude will re-check TZ
+    else {
+      categoryRejected++
+      catRejectedBySource[j._source] = (catRejectedBySource[j._source] ?? 0) + 1
+    }
+  }
+
   console.log(`  Include: ${include.length}  Borderline: ${borderline.length}  Rejected: ${categoryRejected}`)
   for (const [src, n] of Object.entries(catRejectedBySource)) {
     console.log(`  Category-rejected from ${src}: ${n}`)
@@ -598,7 +890,8 @@ async function ingest() {
     } else {
       for (let i = 0; i < borderline.length; i++) {
         const j = borderline[i]
-        process.stdout.write(`  [${i + 1}/${borderline.length}] ${j.title.slice(0, 50).padEnd(50)} `)
+        const tzNote = j._tzFlagged ? ' [TZ-flagged]' : ''
+        process.stdout.write(`  [${i + 1}/${borderline.length}] ${j.title.slice(0, 48).padEnd(48)}${tzNote} `)
         const verdict = await claudeClassify({
           title: j.title,
           company_name: j.company_name,
@@ -615,20 +908,21 @@ async function ingest() {
   }
 
   // ── Summary before insert ─────────────────────────────────────────────────
-  const totalRejected = regionStats.rejected + categoryRejected + claudeExcluded
+  const totalRejected = langRejected.total + regionStats.rejected + categoryRejected + claudeExcluded
   console.log(`\n=== Pre-insert summary ===`)
-  console.log(`  Raw fetched:       ${allJobs.length}`)
-  console.log(`  New (deduped):     ${newJobs.length}`)
-  console.log(`  Region rejected:   ${regionStats.rejected}`)
-  console.log(`  Category rejected: ${categoryRejected}`)
-  console.log(`  Claude adjud:      ${borderline.length} sent → ${claudeIncluded} in, ${claudeExcluded} out`)
-  console.log(`  Total to insert:   ${include.length}`)
-  console.log(`  Total rejected:    ${totalRejected}`)
+  console.log(`  Raw fetched:          ${allJobs.length}`)
+  console.log(`  New (deduped):        ${newJobs.length}`)
+  console.log(`  Language rejected:    ${langRejected.total}`)
+  console.log(`  Region rejected:      ${regionStats.rejected}`)
+  console.log(`  TZ-flagged→Claude:    ${regionStats.tzBorderline}`)
+  console.log(`  Category rejected:    ${categoryRejected}`)
+  console.log(`  Claude adjud:         ${borderline.length} sent → ${claudeIncluded} in, ${claudeExcluded} out`)
+  console.log(`  Total to insert:      ${include.length}`)
+  console.log(`  Total rejected:       ${totalRejected}`)
 
-  // Per-source raw counts
   console.log(`\n  Per-source raw:`)
   for (const [src, count] of Object.entries(rawBySource)) {
-    console.log(`    ${src.padEnd(12)} ${count}`)
+    console.log(`    ${src.padEnd(14)} ${count}`)
   }
 
   if (include.length === 0) { console.log('\nNothing to insert.'); return }
@@ -677,22 +971,38 @@ async function ingest() {
     }
   }
 
+  // ── Company diversity breakdown ────────────────────────────────────────────
+  const companyCounts = {}
+  for (const l of insertedListings) {
+    companyCounts[l.company] = (companyCounts[l.company] ?? 0) + 1
+  }
+  const sortedCompanies = Object.entries(companyCounts).sort((a, b) => b[1] - a[1])
+
   // ── Final report ──────────────────────────────────────────────────────────
   console.log(`\n=== FINAL REPORT ===`)
   console.log(`Per-source raw fetched:`)
   for (const [src, count] of Object.entries(rawBySource)) {
-    console.log(`  ${src.padEnd(12)} ${count} raw`)
+    console.log(`  ${src.padEnd(14)} ${count} raw`)
   }
   console.log(`\nFilter pipeline:`)
-  console.log(`  Region rejected:   ${regionStats.rejected}`)
-  console.log(`  Category rejected: ${categoryRejected}`)
-  console.log(`  Claude sent:       ${borderline.length}  (included: ${claudeIncluded}, excluded: ${claudeExcluded})`)
+  console.log(`  Language rejected:    ${langRejected.total}`)
+  console.log(`  Region rejected:      ${regionStats.rejected}`)
+  console.log(`  TZ-borderlined:       ${regionStats.tzBorderline}`)
+  console.log(`  Category rejected:    ${categoryRejected}`)
+  console.log(`  Claude sent:          ${borderline.length}  (included: ${claudeIncluded}, excluded: ${claudeExcluded})`)
   console.log(`\nDB outcome:`)
-  console.log(`  Inserted: ${inserted}`)
-  console.log(`  Failed:   ${failed}`)
+  console.log(`  Inserted:  ${inserted}`)
+  console.log(`  Failed:    ${failed}`)
+  console.log(`  Unique companies represented: ${sortedCompanies.length}`)
+
+  console.log(`\nCompany breakdown (${sortedCompanies.length} unique):`)
+  for (const [company, count] of sortedCompanies) {
+    console.log(`  ${String(count).padStart(3)}x  ${company}`)
+  }
+
   console.log(`\nInserted listings:`)
   insertedListings.forEach((l, i) =>
-    console.log(`  ${String(i + 1).padStart(3)}. [T${l.tier}][${l.source.padEnd(10)}] ${l.title.slice(0, 45).padEnd(45)} @ ${l.company} (${l.region})`)
+    console.log(`  ${String(i + 1).padStart(3)}. [T${l.tier}][${l.source.padEnd(12)}] ${l.title.slice(0, 43).padEnd(43)} @ ${l.company} (${l.region})`)
   )
 }
 
