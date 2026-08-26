@@ -39,6 +39,28 @@ async function getListings() {
 
 type Listing = Awaited<ReturnType<typeof getListings>>[number]
 
+// Regions shown first regardless of count
+const PRIORITY_REGIONS = ['Pakistan', 'South Asia', 'Worldwide']
+
+function buildRegionOrder(listings: Listing[]): { region: string; count: number }[] {
+  const counts: Record<string, number> = {}
+  for (const l of listings) {
+    const r = l.region_eligibility ?? 'Worldwide'
+    counts[r] = (counts[r] ?? 0) + 1
+  }
+
+  const priority = PRIORITY_REGIONS
+    .filter((r) => counts[r])
+    .map((r) => ({ region: r, count: counts[r] }))
+
+  const rest = Object.entries(counts)
+    .filter(([r]) => !PRIORITY_REGIONS.includes(r))
+    .sort((a, b) => b[1] - a[1])
+    .map(([region, count]) => ({ region, count }))
+
+  return [...priority, ...rest]
+}
+
 function VerifiedBadge() {
   return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#E8F5EF] text-[#1A6B4A] border border-[#B6DFD0] text-xs font-semibold">
@@ -88,6 +110,8 @@ function JobCard({ listing }: { listing: Listing }) {
     ? listing.companies[0]
     : listing.companies
 
+  const isWorldwide = listing.region_eligibility === 'Worldwide'
+
   return (
     <Link href={`/listings/${listing.id}`}>
       <article className="bg-white rounded-xl border border-[#D1D9E0] p-4 sm:p-5 hover:border-[#9BAFC4] hover:shadow-sm transition-all cursor-pointer group">
@@ -105,6 +129,9 @@ function JobCard({ listing }: { listing: Listing }) {
                 </p>
                 <h2 className="text-base font-semibold text-[#111827] mt-0.5 group-hover:text-[#1A6B4A] transition-colors leading-snug">
                   {listing.title}
+                  {isWorldwide && (
+                    <span className="font-normal text-[#1A6B4A]"> — Remote from Anywhere</span>
+                  )}
                 </h2>
               </div>
               <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
@@ -198,15 +225,16 @@ const SENIORITY_FILTERS = [
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; seniority?: string; company?: string }>
+  searchParams: Promise<{ q?: string; seniority?: string; company?: string; region?: string }>
 }) {
-  const { q, seniority, company } = await searchParams
+  const { q, seniority, company, region } = await searchParams
   const listings = await getListings()
 
   const filtered = listings.filter((l) => {
     if (seniority && l.seniority !== seniority) return false
     const co = Array.isArray(l.companies) ? l.companies[0] : l.companies
     if (company && co?.name !== company) return false
+    if (region && l.region_eligibility !== region) return false
     if (q) {
       const s = q.toLowerCase()
       if (
@@ -219,7 +247,8 @@ export default async function HomePage({
     return true
   })
 
-  const hasFilters = !!(q || seniority || company)
+  const hasFilters = !!(q || seniority || company || region)
+  const regionOrder = buildRegionOrder(listings)
 
   return (
     <>
@@ -240,13 +269,15 @@ export default async function HomePage({
 
       {/* Filter + results */}
       <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8">
+
         {/* Seniority filter pills */}
-        <div className="flex flex-wrap gap-2 mb-6">
+        <div className="flex flex-wrap gap-2 mb-3">
           {SENIORITY_FILTERS.map(({ label, value }) => {
             const isActive = (seniority ?? '') === value
             const params = new URLSearchParams()
             if (q) params.set('q', q)
             if (value) params.set('seniority', value)
+            if (region) params.set('region', region)
             return (
               <Link
                 key={value}
@@ -258,6 +289,52 @@ export default async function HomePage({
                 }`}
               >
                 {label}
+              </Link>
+            )
+          })}
+        </div>
+
+        {/* Region filter pills */}
+        <div className="flex flex-wrap gap-2 mb-6">
+          {/* All Regions */}
+          {(() => {
+            const params = new URLSearchParams()
+            if (q) params.set('q', q)
+            if (seniority) params.set('seniority', seniority)
+            const isActive = !region
+            return (
+              <Link
+                href={`/?${params.toString()}`}
+                className={`text-sm px-4 py-1.5 rounded-full font-medium transition-colors ${
+                  isActive
+                    ? 'bg-[#1A6B4A] text-white'
+                    : 'bg-white text-[#6B7A8D] border border-[#D1D9E0] hover:border-[#9BAFC4] hover:text-[#111827]'
+                }`}
+              >
+                All Regions
+              </Link>
+            )
+          })()}
+          {regionOrder.map(({ region: r, count }) => {
+            const isActive = region === r
+            const params = new URLSearchParams()
+            if (q) params.set('q', q)
+            if (seniority) params.set('seniority', seniority)
+            params.set('region', r)
+            return (
+              <Link
+                key={r}
+                href={`/?${params.toString()}`}
+                className={`text-sm px-4 py-1.5 rounded-full font-medium transition-colors ${
+                  isActive
+                    ? 'bg-[#1A6B4A] text-white'
+                    : 'bg-white text-[#6B7A8D] border border-[#D1D9E0] hover:border-[#9BAFC4] hover:text-[#111827]'
+                }`}
+              >
+                {r}
+                <span className={`ml-1.5 text-xs ${isActive ? 'opacity-75' : 'text-[#9BAFC4]'}`}>
+                  {count}
+                </span>
               </Link>
             )
           })}

@@ -156,69 +156,119 @@ function isEnglish(title, description) {
 // null  : Single-country restriction (not Pakistan) → REJECT
 // ---------------------------------------------------------------------------
 
-const SINGLE_COUNTRIES = [
-  'usa', 'united states', 'us only', 'u.s.', 'america',
-  'uk', 'united kingdom', 'britain', 'england', 'great britain',
-  'germany', 'deutschland', 'france', 'spain', 'italy',
-  'netherlands', 'holland', 'canada', 'australia',
-  'india', 'brazil', 'mexico', 'portugal', 'sweden',
-  'norway', 'denmark', 'finland', 'poland', 'czech republic',
-  'czechia', 'romania', 'ukraine', 'israel', 'turkey',
-  'japan', 'south korea', 'singapore', 'hong kong',
-  'new zealand', 'ireland', 'austria', 'belgium', 'switzerland',
-  'malaysia', 'thailand', 'philippines', 'indonesia',
-  'vietnam', 'greece', 'hungary', 'bulgaria', 'croatia',
-  'serbia', 'slovakia', 'slovenia', 'latvia', 'estonia',
-  'lithuania', 'cyprus', 'malta', 'egypt', 'kenya', 'nigeria',
-  'argentina', 'colombia', 'chile', 'peru', 'ecuador',
-]
+// Aggregator sources pre-filter for remote jobs — any location they return is a
+// region restriction, not an in-office signal.
+const REMOTE_AGGREGATORS = new Set(['Remotive', 'Arbeitnow', 'RemoteOK', 'Himalayas', 'WorkingNomads', 'Jobicy'])
 
 /**
- * @returns {{ tier: number, normalized: string } | null}
- * null = reject
+ * Classify a job's location into a human-readable region tag.
+ *
+ * Returns a string tag (e.g. 'Worldwide', 'USA', 'EMEA', 'UK') or null if
+ * the listing appears to be in-office/on-site and should be rejected.
+ *
+ * For aggregator sources (Remotive, RemoteOK, etc.) every job is already
+ * remote — unknown locations fall back to 'Worldwide'.
+ * For ATS sources (Greenhouse, Lever) a location with no 'remote' keyword
+ * and no recognized region label is treated as in-office and rejected.
+ *
+ * @param {string} location
+ * @param {string} source - job._source value
+ * @returns {string | null}
  */
-function classifyRegion(location) {
+function classifyRegion(location, source) {
   const raw = (location ?? '').trim()
-  if (!raw || raw.toLowerCase() === 'remote') return { tier: 1, normalized: 'Worldwide' }
+  const isAggregator = REMOTE_AGGREGATORS.has(source)
 
-  const l = raw.toLowerCase()
-
-  // Tier 1 — Worldwide
-  if (/worldwide|global|anywhere|international|no location restriction|open globally|location independent|work from anywhere|\bwfa\b|all countries|fully remote|any country|no geographic restriction/.test(l)) {
-    return { tier: 1, normalized: 'Worldwide' }
+  // ATS source with a location that has no 'remote' indicator and no broad
+  // region keyword → almost certainly an in-office listing, reject it.
+  if (!isAggregator && raw) {
+    const hasRemoteKeyword = /remote/i.test(raw)
+    const hasBroadRegion = /\b(emea|apac|asia.?pacific|worldwide|global|anywhere|international)\b/i.test(raw)
+    if (!hasRemoteKeyword && !hasBroadRegion) return null
   }
 
-  // Tier 2 — Pakistan / South Asia explicitly
-  if (/pakistan|south asia/.test(l)) {
-    return { tier: 2, normalized: /south asia/.test(l) ? 'South Asia' : 'Pakistan' }
-  }
-
-  // Tier 3 — Approved broad multi-country regions: EMEA and APAC only
-  // Plain "Europe", "Asia", "Latin America", "Africa", "Middle East" alone → REJECT
-  if (/\bemea\b/.test(l)) return { tier: 3, normalized: 'EMEA' }
-  if (/\bapac\b|asia[- ]pacific/.test(l)) return { tier: 3, normalized: 'APAC' }
-
-  // Tier 4 — Visa sponsorship / relocation
-  if (/visa sponsorship|relocation (support|assistance)|work authorization|sponsorship available/.test(l)) {
-    return { tier: 4, normalized: 'Visa Sponsorship Available' }
-  }
-
-  // Single-country detection — strip common prefixes then match
-  const stripped = l
-    .replace(/^remote\s*[-–—(]?\s*/i, '')
-    .replace(/\)$/, '')
+  // Strip "Remote" prefix so we can parse the restriction cleanly
+  const stripped = raw
+    .toLowerCase()
+    .replace(/^remote\s*[-–—(,/]?\s*/i, '')
+    .replace(/[()]/g, '')
     .trim()
 
-  if (SINGLE_COUNTRIES.some((c) => stripped === c || stripped === c + ' only')) {
-    return null // reject
-  }
+  // No restriction — open to anyone
+  if (
+    !stripped ||
+    stripped === 'remote' ||
+    /worldwide|global|anywhere|international|open globally|location independent|work from anywhere|\bwfa\b|all countries|any country|no geographic restriction|fully remote/.test(stripped)
+  ) return 'Worldwide'
 
-  // Also reject if location contains restriction language + a single country name
-  if (/\b(only|residents?|citizens?|must be (based|located) in)\b/.test(l)) {
-    if (SINGLE_COUNTRIES.some((c) => l.includes(c))) return null
-  }
+  // Pakistan / South Asia (highest priority for this board)
+  if (/pakistan/.test(stripped)) return 'Pakistan'
+  if (/south asia/.test(stripped)) return 'South Asia'
 
-  // Ambiguous / specific city / plain continent name — reject
+  // Broad multi-country regions
+  if (/\bemea\b/.test(stripped)) return 'EMEA'
+  if (/\bapac\b|asia[- ]pacific/.test(stripped)) return 'APAC'
+  if (/\b(latam|latin america)\b/.test(stripped)) return 'LATAM'
+  if (/\beurope\b/.test(stripped)) return 'Europe'
+  if (/\bmena\b/.test(stripped)) return 'MENA'
+  if (/\bcea\b/.test(stripped)) return 'CEE'
+
+  // Country tags — ordered roughly by how often they appear in remote job data
+  if (/\b(usa|united states|u\.s\.|us only)\b/.test(stripped)) return 'USA'
+  if (/\bcanada\b/.test(stripped)) return 'Canada'
+  if (/\b(uk|united kingdom|britain|england|great britain)\b/.test(stripped)) return 'UK'
+  if (/\baustralia\b/.test(stripped)) return 'Australia'
+  if (/\b(germany|deutschland)\b/.test(stripped)) return 'Germany'
+  if (/\bfrance\b/.test(stripped)) return 'France'
+  if (/\b(netherlands|holland)\b/.test(stripped)) return 'Netherlands'
+  if (/\bindia\b/.test(stripped)) return 'India'
+  if (/\bireland\b/.test(stripped)) return 'Ireland'
+  if (/\bpoland\b/.test(stripped)) return 'Poland'
+  if (/\bspain\b/.test(stripped)) return 'Spain'
+  if (/\bitaly\b/.test(stripped)) return 'Italy'
+  if (/\bsingapore\b/.test(stripped)) return 'Singapore'
+  if (/\bnew zealand\b/.test(stripped)) return 'New Zealand'
+  if (/\bportugal\b/.test(stripped)) return 'Portugal'
+  if (/\bsweden\b/.test(stripped)) return 'Sweden'
+  if (/\bnorway\b/.test(stripped)) return 'Norway'
+  if (/\bdenmark\b/.test(stripped)) return 'Denmark'
+  if (/\bfinland\b/.test(stripped)) return 'Finland'
+  if (/\bromania\b/.test(stripped)) return 'Romania'
+  if (/\bczech/.test(stripped)) return 'Czech Republic'
+  if (/\bswitzerland\b/.test(stripped)) return 'Switzerland'
+  if (/\baustria\b/.test(stripped)) return 'Austria'
+  if (/\belgium\b/.test(stripped)) return 'Belgium'
+  if (/\bgreece\b/.test(stripped)) return 'Greece'
+  if (/\bhungary\b/.test(stripped)) return 'Hungary'
+  if (/\bukraine\b/.test(stripped)) return 'Ukraine'
+  if (/\bisrael\b/.test(stripped)) return 'Israel'
+  if (/\bturkey\b/.test(stripped)) return 'Turkey'
+  if (/\bjapan\b/.test(stripped)) return 'Japan'
+  if (/\bsouth korea\b/.test(stripped)) return 'South Korea'
+  if (/\bphilippines\b/.test(stripped)) return 'Philippines'
+  if (/\bmalaysia\b/.test(stripped)) return 'Malaysia'
+  if (/\bindonesia\b/.test(stripped)) return 'Indonesia'
+  if (/\bvietnam\b/.test(stripped)) return 'Vietnam'
+  if (/\bthailand\b/.test(stripped)) return 'Thailand'
+  if (/\bhong kong\b/.test(stripped)) return 'Hong Kong'
+  if (/\bmexic/.test(stripped)) return 'Mexico'
+  if (/\bbrazil\b/.test(stripped)) return 'Brazil'
+  if (/\bargentina\b/.test(stripped)) return 'Argentina'
+  if (/\bcolombia\b/.test(stripped)) return 'Colombia'
+  if (/\bchile\b/.test(stripped)) return 'Chile'
+  if (/\bnigeria\b/.test(stripped)) return 'Nigeria'
+  if (/\bsouth africa\b/.test(stripped)) return 'South Africa'
+  if (/\bkenya\b/.test(stripped)) return 'Kenya'
+  if (/\begypt\b/.test(stripped)) return 'Egypt'
+
+  // Still has "remote" in the original string — unknown restriction but remote → Worldwide
+  if (/remote/i.test(raw)) return 'Worldwide'
+
+  // Aggregator pre-filters remote, so any unrecognized location is a region we
+  // don't have a tag for → treat as Worldwide rather than losing the listing
+  if (isAggregator) return 'Worldwide'
+
+  // ATS source, unrecognized location, no remote signal → reject (in-office)
   return null
 }
 
@@ -811,27 +861,26 @@ async function ingest() {
     console.log(`  Language-rejected from ${src}: ${n}`)
   }
 
-  // ── Stage 1: Region ───────────────────────────────────────────────────────
-  console.log('\n=== Stage 1: Region filter ===')
-  const regionStats = { t1: 0, t2: 0, t3: 0, t4: 0, rejected: 0, tzBorderline: 0 }
+  // ── Stage 1: Region tagging ───────────────────────────────────────────────
+  console.log('\n=== Stage 1: Region tagging ===')
+  const regionTagCounts = {}
+  let regionRejected = 0
   const regionRejectedBySource = {}
   const afterRegion = []
   const timezoneBorderline = []
 
   for (const j of afterLanguage) {
-    const result = classifyRegion(j.location)
-    if (!result) {
-      regionStats.rejected++
+    const region = classifyRegion(j.location, j._source)
+    if (!region) {
+      regionRejected++
       regionRejectedBySource[j._source] = (regionRejectedBySource[j._source] ?? 0) + 1
       continue
     }
-    j._regionTier = result.tier
-    j._regionNormalized = result.normalized
-    regionStats[`t${result.tier}`]++
+    j._region = region
+    regionTagCounts[region] = (regionTagCounts[region] ?? 0) + 1
 
-    // Timezone restriction in description → borderline for Claude adjudication
-    if (result.tier === 1 && hasTimezoneRestriction(j.short_summary)) {
-      regionStats.tzBorderline++
+    // Timezone restriction in Worldwide listings → borderline for Claude adjudication
+    if (region === 'Worldwide' && hasTimezoneRestriction(j.short_summary)) {
       j._tzFlagged = true
       timezoneBorderline.push(j)
     } else {
@@ -839,10 +888,14 @@ async function ingest() {
     }
   }
 
-  console.log(`  Pass: ${afterRegion.length}  TZ-borderline: ${timezoneBorderline.length}  Rejected: ${regionStats.rejected}`)
-  console.log(`  Tier breakdown → T1 Worldwide: ${regionStats.t1} | T2 Pakistan: ${regionStats.t2} | T3 EMEA/APAC: ${regionStats.t3} | T4 Visa: ${regionStats.t4}`)
+  const tzBorderlineCount = timezoneBorderline.length
+  console.log(`  Pass: ${afterRegion.length}  TZ-borderline (Worldwide): ${tzBorderlineCount}  Rejected (in-office): ${regionRejected}`)
+  console.log(`  Region breakdown:`)
+  for (const [region, count] of Object.entries(regionTagCounts).sort((a, b) => b[1] - a[1])) {
+    console.log(`    ${region.padEnd(16)} ${count}`)
+  }
   for (const [src, n] of Object.entries(regionRejectedBySource)) {
-    console.log(`  Region-rejected from ${src}: ${n}`)
+    console.log(`  Rejected from ${src}: ${n}`)
   }
 
   // ── Stage 2: Category ─────────────────────────────────────────────────────
@@ -895,7 +948,7 @@ async function ingest() {
         const verdict = await claudeClassify({
           title: j.title,
           company_name: j.company_name,
-          region: j._regionNormalized,
+          region: j._region,
           tags: j.tags,
           short_summary: j.short_summary,
         })
@@ -908,13 +961,13 @@ async function ingest() {
   }
 
   // ── Summary before insert ─────────────────────────────────────────────────
-  const totalRejected = langRejected.total + regionStats.rejected + categoryRejected + claudeExcluded
+  const totalRejected = langRejected.total + regionRejected + categoryRejected + claudeExcluded
   console.log(`\n=== Pre-insert summary ===`)
   console.log(`  Raw fetched:          ${allJobs.length}`)
   console.log(`  New (deduped):        ${newJobs.length}`)
   console.log(`  Language rejected:    ${langRejected.total}`)
-  console.log(`  Region rejected:      ${regionStats.rejected}`)
-  console.log(`  TZ-flagged→Claude:    ${regionStats.tzBorderline}`)
+  console.log(`  Region rejected:      ${regionRejected}`)
+  console.log(`  TZ-flagged→Claude:    ${tzBorderlineCount}`)
   console.log(`  Category rejected:    ${categoryRejected}`)
   console.log(`  Claude adjud:         ${borderline.length} sent → ${claudeIncluded} in, ${claudeExcluded} out`)
   console.log(`  Total to insert:      ${include.length}`)
@@ -950,7 +1003,7 @@ async function ingest() {
       title: job.title,
       seniority: job.seniority,
       location_type: 'remote',
-      region_eligibility: job._regionNormalized,
+      region_eligibility: job._region,
       tags: job.tags,
       salary_range: job.salary_range,
       short_summary: job.short_summary || 'No description available.',
@@ -967,7 +1020,7 @@ async function ingest() {
       failed++
     } else {
       inserted++
-      insertedListings.push({ title: job.title, company: job.company_name, tier: job._regionTier, region: job._regionNormalized, source: job._source })
+      insertedListings.push({ title: job.title, company: job.company_name, region: job._region, source: job._source })
     }
   }
 
@@ -986,14 +1039,23 @@ async function ingest() {
   }
   console.log(`\nFilter pipeline:`)
   console.log(`  Language rejected:    ${langRejected.total}`)
-  console.log(`  Region rejected:      ${regionStats.rejected}`)
-  console.log(`  TZ-borderlined:       ${regionStats.tzBorderline}`)
+  console.log(`  Region rejected:      ${regionRejected}`)
+  console.log(`  TZ-borderlined:       ${tzBorderlineCount}`)
   console.log(`  Category rejected:    ${categoryRejected}`)
   console.log(`  Claude sent:          ${borderline.length}  (included: ${claudeIncluded}, excluded: ${claudeExcluded})`)
   console.log(`\nDB outcome:`)
   console.log(`  Inserted:  ${inserted}`)
   console.log(`  Failed:    ${failed}`)
   console.log(`  Unique companies represented: ${sortedCompanies.length}`)
+
+  const insertedRegionCounts = {}
+  for (const l of insertedListings) {
+    insertedRegionCounts[l.region] = (insertedRegionCounts[l.region] ?? 0) + 1
+  }
+  console.log(`\nRegion breakdown (inserted):`)
+  for (const [region, count] of Object.entries(insertedRegionCounts).sort((a, b) => b[1] - a[1])) {
+    console.log(`  ${String(count).padStart(4)}x  ${region}`)
+  }
 
   console.log(`\nCompany breakdown (${sortedCompanies.length} unique):`)
   for (const [company, count] of sortedCompanies) {
@@ -1002,7 +1064,7 @@ async function ingest() {
 
   console.log(`\nInserted listings:`)
   insertedListings.forEach((l, i) =>
-    console.log(`  ${String(i + 1).padStart(3)}. [T${l.tier}][${l.source.padEnd(12)}] ${l.title.slice(0, 43).padEnd(43)} @ ${l.company} (${l.region})`)
+    console.log(`  ${String(i + 1).padStart(3)}. [${l.source.padEnd(12)}] ${l.title.slice(0, 43).padEnd(43)} @ ${l.company} (${l.region})`)
   )
 }
 
