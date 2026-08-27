@@ -15,6 +15,7 @@ async function getListings() {
       seniority,
       location_type,
       region_eligibility,
+      category,
       tags,
       salary_range,
       short_summary,
@@ -39,27 +40,31 @@ async function getListings() {
 
 type Listing = Awaited<ReturnType<typeof getListings>>[number]
 
-// Regions shown first regardless of count
-const PRIORITY_REGIONS = ['Pakistan', 'South Asia', 'Worldwide']
+const LOCATION_FILTERS = [
+  { label: 'All', value: '' },
+  { label: 'Worldwide', value: 'Worldwide' },
+  { label: 'USA', value: 'USA' },
+  { label: 'UK', value: 'UK' },
+  { label: 'EMEA', value: 'EMEA' },
+  { label: 'APAC', value: 'APAC' },
+]
 
-function buildRegionOrder(listings: Listing[]): { region: string; count: number }[] {
-  const counts: Record<string, number> = {}
-  for (const l of listings) {
-    const r = l.region_eligibility ?? 'Worldwide'
-    counts[r] = (counts[r] ?? 0) + 1
-  }
+const WORK_TYPE_FILTERS = [
+  { label: 'All', value: '' },
+  { label: 'Software Dev', value: 'Software Development' },
+  { label: 'Sales', value: 'Sales' },
+  { label: 'Marketing', value: 'Marketing' },
+  { label: 'HR', value: 'HR' },
+  { label: 'Legal', value: 'Legal' },
+  { label: 'Finance', value: 'Finance' },
+]
 
-  const priority = PRIORITY_REGIONS
-    .filter((r) => counts[r])
-    .map((r) => ({ region: r, count: counts[r] }))
-
-  const rest = Object.entries(counts)
-    .filter(([r]) => !PRIORITY_REGIONS.includes(r))
-    .sort((a, b) => b[1] - a[1])
-    .map(([region, count]) => ({ region, count }))
-
-  return [...priority, ...rest]
-}
+const SENIORITY_FILTERS = [
+  { label: 'All', value: '' },
+  { label: 'Entry-level', value: 'entry' },
+  { label: 'Mid-level', value: 'mid' },
+  { label: 'Senior', value: 'senior' },
+]
 
 function VerifiedBadge() {
   return (
@@ -79,6 +84,29 @@ function VerifiedBadge() {
         <polyline points="9 12 11 14 15 10" />
       </svg>
       Verified
+    </span>
+  )
+}
+
+function HiresFromPakistanBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#054F2B] text-white text-xs font-semibold">
+      <svg
+        width="10"
+        height="10"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <circle cx="12" cy="12" r="10" />
+        <line x1="2" y1="12" x2="22" y2="12" />
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+      </svg>
+      Hires from Pakistan
     </span>
   )
 }
@@ -135,6 +163,7 @@ function JobCard({ listing }: { listing: Listing }) {
                 </h2>
               </div>
               <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                {isWorldwide && <HiresFromPakistanBadge />}
                 {listing.verified && <VerifiedBadge />}
                 {listing.salary_range && (
                   <span className="text-sm font-semibold text-[#111827] whitespace-nowrap">
@@ -215,28 +244,21 @@ function EmptyState({ hasFilters }: { hasFilters: boolean }) {
   )
 }
 
-const SENIORITY_FILTERS = [
-  { label: 'All Levels', value: '' },
-  { label: 'Entry-level', value: 'entry' },
-  { label: 'Mid-level', value: 'mid' },
-  { label: 'Senior', value: 'senior' },
-]
-
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; seniority?: string; company?: string; region?: string }>
+  searchParams: Promise<{ q?: string; seniority?: string; region?: string; category?: string }>
 }) {
-  const { q, seniority, company, region } = await searchParams
+  const { q, seniority, region, category } = await searchParams
   const listings = await getListings()
 
   const filtered = listings.filter((l) => {
     if (seniority && l.seniority !== seniority) return false
-    const co = Array.isArray(l.companies) ? l.companies[0] : l.companies
-    if (company && co?.name !== company) return false
     if (region && l.region_eligibility !== region) return false
+    if (category && (l as { category?: string | null }).category !== category) return false
     if (q) {
       const s = q.toLowerCase()
+      const co = Array.isArray(l.companies) ? l.companies[0] : l.companies
       if (
         !l.title.toLowerCase().includes(s) &&
         !co?.name?.toLowerCase().includes(s) &&
@@ -247,8 +269,20 @@ export default async function HomePage({
     return true
   })
 
-  const hasFilters = !!(q || seniority || company || region)
-  const regionOrder = buildRegionOrder(listings)
+  const hasFilters = !!(q || seniority || region || category)
+
+  function makeParams(overrides: Record<string, string>) {
+    const p = new URLSearchParams()
+    if (q) p.set('q', q)
+    if (seniority) p.set('seniority', seniority)
+    if (region) p.set('region', region)
+    if (category) p.set('category', category)
+    for (const [k, v] of Object.entries(overrides)) {
+      if (v) p.set(k, v)
+      else p.delete(k)
+    }
+    return p.toString()
+  }
 
   return (
     <>
@@ -270,74 +304,77 @@ export default async function HomePage({
       {/* Filter + results */}
       <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8">
 
-        {/* Seniority filter pills */}
-        <div className="flex flex-wrap gap-2 mb-3">
-          {SENIORITY_FILTERS.map(({ label, value }) => {
-            const isActive = (seniority ?? '') === value
-            const params = new URLSearchParams()
-            if (q) params.set('q', q)
-            if (value) params.set('seniority', value)
-            if (region) params.set('region', region)
-            return (
-              <Link
-                key={value}
-                href={`/?${params.toString()}`}
-                className={`text-sm px-4 py-1.5 rounded-full font-medium transition-colors ${
-                  isActive
-                    ? 'bg-[#111827] text-white'
-                    : 'bg-white text-[#6B7A8D] border border-[#D1D9E0] hover:border-[#9BAFC4] hover:text-[#111827]'
-                }`}
-              >
-                {label}
-              </Link>
-            )
-          })}
-        </div>
+        {/* Filter groups */}
+        <div className="space-y-2.5 mb-6">
 
-        {/* Region filter pills */}
-        <div className="flex flex-wrap gap-2 mb-6">
-          {/* All Regions */}
-          {(() => {
-            const params = new URLSearchParams()
-            if (q) params.set('q', q)
-            if (seniority) params.set('seniority', seniority)
-            const isActive = !region
-            return (
-              <Link
-                href={`/?${params.toString()}`}
-                className={`text-sm px-4 py-1.5 rounded-full font-medium transition-colors ${
-                  isActive
-                    ? 'bg-[#1A6B4A] text-white'
-                    : 'bg-white text-[#6B7A8D] border border-[#D1D9E0] hover:border-[#9BAFC4] hover:text-[#111827]'
-                }`}
-              >
-                All Regions
-              </Link>
-            )
-          })()}
-          {regionOrder.map(({ region: r, count }) => {
-            const isActive = region === r
-            const params = new URLSearchParams()
-            if (q) params.set('q', q)
-            if (seniority) params.set('seniority', seniority)
-            params.set('region', r)
-            return (
-              <Link
-                key={r}
-                href={`/?${params.toString()}`}
-                className={`text-sm px-4 py-1.5 rounded-full font-medium transition-colors ${
-                  isActive
-                    ? 'bg-[#1A6B4A] text-white'
-                    : 'bg-white text-[#6B7A8D] border border-[#D1D9E0] hover:border-[#9BAFC4] hover:text-[#111827]'
-                }`}
-              >
-                {r}
-                <span className={`ml-1.5 text-xs ${isActive ? 'opacity-75' : 'text-[#9BAFC4]'}`}>
-                  {count}
-                </span>
-              </Link>
-            )
-          })}
+          {/* Location */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-[#6B7A8D] uppercase tracking-wide w-20 shrink-0">
+              Location
+            </span>
+            {LOCATION_FILTERS.map(({ label, value }) => {
+              const isActive = (region ?? '') === value
+              return (
+                <Link
+                  key={value}
+                  href={`/?${makeParams({ region: value })}`}
+                  className={`text-sm px-3 py-1 rounded-full font-medium transition-colors ${
+                    isActive
+                      ? 'bg-[#1A6B4A] text-white'
+                      : 'bg-white text-[#6B7A8D] border border-[#D1D9E0] hover:border-[#9BAFC4] hover:text-[#111827]'
+                  }`}
+                >
+                  {label}
+                </Link>
+              )
+            })}
+          </div>
+
+          {/* Work Type */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-[#6B7A8D] uppercase tracking-wide w-20 shrink-0">
+              Work Type
+            </span>
+            {WORK_TYPE_FILTERS.map(({ label, value }) => {
+              const isActive = (category ?? '') === value
+              return (
+                <Link
+                  key={value}
+                  href={`/?${makeParams({ category: value })}`}
+                  className={`text-sm px-3 py-1 rounded-full font-medium transition-colors ${
+                    isActive
+                      ? 'bg-[#111827] text-white'
+                      : 'bg-white text-[#6B7A8D] border border-[#D1D9E0] hover:border-[#9BAFC4] hover:text-[#111827]'
+                  }`}
+                >
+                  {label}
+                </Link>
+              )
+            })}
+          </div>
+
+          {/* Seniority */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-[#6B7A8D] uppercase tracking-wide w-20 shrink-0">
+              Seniority
+            </span>
+            {SENIORITY_FILTERS.map(({ label, value }) => {
+              const isActive = (seniority ?? '') === value
+              return (
+                <Link
+                  key={value}
+                  href={`/?${makeParams({ seniority: value })}`}
+                  className={`text-sm px-3 py-1 rounded-full font-medium transition-colors ${
+                    isActive
+                      ? 'bg-[#3B4FBB] text-white'
+                      : 'bg-white text-[#6B7A8D] border border-[#D1D9E0] hover:border-[#9BAFC4] hover:text-[#111827]'
+                  }`}
+                >
+                  {label}
+                </Link>
+              )
+            })}
+          </div>
         </div>
 
         {/* Results count */}
