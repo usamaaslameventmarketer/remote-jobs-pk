@@ -9,17 +9,13 @@
  *   node scripts/backfill-category.mjs
  */
 
-import { readFileSync } from 'fs'
 import { createClient } from '@supabase/supabase-js'
 
-const env = readFileSync(new URL('../.env.local', import.meta.url), 'utf8')
-const vars = Object.fromEntries(
-  env.split('\n')
-    .filter(l => l.includes('='))
-    .map(l => { const [k, ...v] = l.split('='); return [k.trim(), v.join('=').trim()] })
-)
+const SUPABASE_URL = 'https://disouyodepqsbsmomkzj.supabase.co'
+const SERVICE_ROLE_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRpc291eW9kZXBxc2JzbW9ta3pqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NjUyODk5NywiZXhwIjoyMTAyMTA0OTk3fQ.Li4QdLi09i65chPFN5pbX3RQVn0iAkLO3eFhZ8cFWXk'
 
-const sb = createClient(vars.NEXT_PUBLIC_SUPABASE_URL, vars.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 
 // ── Region rollup ─────────────────────────────────────────────────────────────
 
@@ -92,7 +88,7 @@ console.log('Fetching all listings...')
 while (true) {
   const { data, error } = await sb
     .from('listings')
-    .select('id, title, tags, region_eligibility, category')
+    .select('id, title, tags, region_eligibility')
     .range(offset, offset + PAGE - 1)
     .order('id')
 
@@ -101,47 +97,78 @@ while (true) {
 
   totalFetched += data.length
 
-  const updates = data.map(row => {
-    const newRegion = rollupRegion(row.region_eligibility)
-    const newCategory = row.category ?? deriveCategory(row.title, row.tags)
-    return { id: row.id, region_eligibility: newRegion, category: newCategory }
-  })
+  const updates = data.map(row => ({
+    id: row.id,
+    region_eligibility: rollupRegion(row.region_eligibility),
+    category: deriveCategory(row.title, row.tags),
+  }))
 
-  // Batch update — Supabase doesn't support bulk upsert with different values per row,
-  // so we do individual updates in parallel chunks
+  // Pass 1: region rollup only (always safe, no new columns)
   const CHUNK = 50
   for (let i = 0; i < updates.length; i += CHUNK) {
     const chunk = updates.slice(i, i + CHUNK)
-    await Promise.all(chunk.map(({ id, region_eligibility, category }) =>
-      sb.from('listings').update({ region_eligibility, category }).eq('id', id)
+    await Promise.all(chunk.map(({ id, region_eligibility }) =>
+      sb.from('listings').update({ region_eligibility }).eq('id', id)
     ))
     totalUpdated += chunk.length
-    process.stdout.write(`\rUpdated ${totalUpdated}/${totalFetched} listings...`)
+    process.stdout.write(`\rRegion pass: ${totalUpdated}/${totalFetched}...`)
   }
 
   if (data.length < PAGE) break
   offset += PAGE
 }
 
-console.log(`\nDone. ${totalUpdated} listings updated.`)
+console.log(`\nRegion pass done. ${totalUpdated} rows updated.`)
 
-// Summary
-const { data: summary } = await sb
-  .from('listings')
-  .select('region_eligibility, category')
+// Pass 2: category — requires PostgREST schema cache to know about the column
+console.log('\nStarting category pass...')
+let catOffset = 0
+let catUpdated = 0
+let catErrors = 0
 
-const regionCounts = {}
-const categoryCounts = {}
-for (const r of summary ?? []) {
-  regionCounts[r.region_eligibility] = (regionCounts[r.region_eligibility] ?? 0) + 1
-  categoryCounts[r.category ?? 'null'] = (categoryCounts[r.category ?? 'null'] ?? 0) + 1
+while (true) {
+  const { data, error } = await sb
+    .from('listings')
+    .select('id, title, tags')
+    .range(catOffset, catOffset + PAGE - 1)
+    .order('id')
+
+  if (error) { console.error('Fetch error:', error.message); process.exit(1) }
+  if (!data || data.length === 0) break
+
+  const CHUNK = 50
+  for (let i = 0; i < data.length; i += CHUNK) {
+    const chunk = data.slice(i, i + CHUNK)
+    const results = await Promise.all(chunk.map(({ id, title, tags }) =>
+      sb.from('listings').update({ category: deriveCategory(title, tags) }).eq('id', id)
+    ))
+    for (const { error: e } of results) {
+      if (e) { catErrors++; if (catErrors === 1) console.error('\nCategory update error:', e.message) }
+      else catUpdated++
+    }
+    process.stdout.write(`\rCategory pass: ${catUpdated + catErrors}/${totalFetched}...`)
+  }
+
+  if (data.length < PAGE) break
+  catOffset += PAGE
 }
 
+if (catErrors > 0) {
+  console.log(`\n⚠️  ${catErrors} category updates failed (schema cache not ready yet).`)
+  console.log('   Go to Supabase dashboard → Project Settings → API → Reload schema cache')
+  console.log('   Then re-run this script.')
+} else {
+  console.log(`\nCategory pass done. ${catUpdated} rows updated.`)
+}
+
+// Summary
+const { data: summary } = await sb.from('listings').select('region_eligibility')
+const regionCounts = {}
+for (const r of summary ?? []) {
+  regionCounts[r.region_eligibility] = (regionCounts[r.region_eligibility] ?? 0) + 1
+}
 console.log('\nRegion breakdown:')
 for (const [k, v] of Object.entries(regionCounts).sort((a, b) => b[1] - a[1])) {
   console.log(`  ${k}: ${v}`)
 }
-console.log('\nCategory breakdown:')
-for (const [k, v] of Object.entries(categoryCounts).sort((a, b) => b[1] - a[1])) {
-  console.log(`  ${k}: ${v}`)
-}
+
