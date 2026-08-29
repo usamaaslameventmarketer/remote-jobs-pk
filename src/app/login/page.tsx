@@ -26,6 +26,7 @@ const btnGhost =
 export default function LoginPage() {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('signin')
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -62,8 +63,9 @@ export default function LoginPage() {
     setError('')
     if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
     if (password !== confirm) { setError('Passwords do not match.'); return }
+    if (!name.trim()) { setError('Please enter your full name.'); return }
     setLoading(true)
-    const { error } = await supabase.auth.signUp({ email, password })
+    const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name.trim() } } })
     setLoading(false)
     if (error) {
       setError(
@@ -174,6 +176,10 @@ export default function LoginPage() {
           {/* Sign Up */}
           {tab === 'signup' && (
             <form onSubmit={handleSignUp} className="space-y-4">
+              <div>
+                <label htmlFor="su-name" className="block text-sm font-medium text-[#111827] mb-1.5">Full name</label>
+                <input id="su-name" type="text" required autoComplete="name" value={name} onChange={e => setName(e.target.value)} placeholder="Jane Smith" className={inputClass} />
+              </div>
               <div>
                 <label htmlFor="su-email" className="block text-sm font-medium text-[#111827] mb-1.5">Email</label>
                 <input id="su-email" type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" className={inputClass} />

@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 export function Nav() {
   const router = useRouter()
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [userName, setUserName] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -15,11 +16,13 @@ export function Nav() {
     // Hydrate with current session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUserEmail(session?.user?.email ?? null)
+      setUserName(session?.user?.user_metadata?.full_name ?? null)
     })
 
     // Keep in sync with auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUserEmail(session?.user?.email ?? null)
+      setUserName(session?.user?.user_metadata?.full_name ?? null)
     })
 
     return () => subscription.unsubscribe()
@@ -42,7 +45,7 @@ export function Nav() {
     router.refresh()
   }
 
-  const initial = userEmail?.[0]?.toUpperCase()
+  const initial = (userName ?? userEmail)?.[0]?.toUpperCase()
 
   return (
     <nav className="sticky top-0 z-50 bg-[#0F2137] border-b border-[#1a3050]">
@@ -87,8 +90,8 @@ export function Nav() {
               {menuOpen && (
                 <div className="absolute right-0 top-full mt-2 bg-white border border-[#D1D9E0] rounded-xl shadow-lg z-50 py-1 min-w-[200px]">
                   <div className="px-3 py-2.5 border-b border-[#F3F5F7]">
-                    <p className="text-xs text-[#6B7A8D] font-medium">Signed in as</p>
-                    <p className="text-sm text-[#111827] font-medium truncate mt-0.5">{userEmail}</p>
+                    {userName && <p className="text-sm text-[#111827] font-medium truncate">{userName}</p>}
+                    <p className={`text-sm truncate ${userName ? 'text-xs text-[#6B7A8D] mt-0.5' : 'text-[#111827] font-medium'}`}>{userEmail}</p>
                   </div>
                   <button
                     type="button"
