@@ -23,6 +23,27 @@ const btnPrimary =
 const btnGhost =
   'w-full text-center text-sm text-[#6B7A8D] hover:text-[#1A6B4A] transition-colors py-1'
 
+function GoogleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+    </svg>
+  )
+}
+
+function Divider() {
+  return (
+    <div className="flex items-center gap-3 my-1">
+      <div className="flex-1 h-px bg-[#E5E7EB]" />
+      <span className="text-xs text-[#9BAFC4] font-medium">or</span>
+      <div className="flex-1 h-px bg-[#E5E7EB]" />
+    </div>
+  )
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('signin')
@@ -76,6 +97,14 @@ export default function LoginPage() {
       return
     }
     setMessage('Account created! Check your email to confirm your address, then sign in.')
+  }
+
+  async function handleGoogleSignIn() {
+    setError('')
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/` },
+    })
   }
 
   async function handleForgot(e: React.FormEvent) {
@@ -154,28 +183,49 @@ export default function LoginPage() {
 
           {/* Sign In */}
           {tab === 'signin' && (
-            <form onSubmit={handleSignIn} className="space-y-4">
-              <div>
-                <label htmlFor="si-email" className="block text-sm font-medium text-[#111827] mb-1.5">Email</label>
-                <input id="si-email" type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" className={inputClass} />
-              </div>
-              <div>
-                <label htmlFor="si-password" className="block text-sm font-medium text-[#111827] mb-1.5">Password</label>
-                <input id="si-password" type="password" required autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" className={inputClass} />
-              </div>
-              {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
-              <button type="submit" disabled={loading} className={btnPrimary}>
-                {loading ? 'Signing in…' : 'Sign in'}
+            <div className="space-y-4">
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                className="w-full flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-lg border border-[#D1D9E0] bg-white text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] hover:border-[#9BAFC4] transition-colors"
+              >
+                <GoogleIcon />
+                Continue with Google
               </button>
-              <button type="button" onClick={() => switchTab('forgot')} className={btnGhost}>
-                Forgot password?
-              </button>
-            </form>
+              <Divider />
+              <form onSubmit={handleSignIn} className="space-y-4">
+                <div>
+                  <label htmlFor="si-email" className="block text-sm font-medium text-[#111827] mb-1.5">Email</label>
+                  <input id="si-email" type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" className={inputClass} />
+                </div>
+                <div>
+                  <label htmlFor="si-password" className="block text-sm font-medium text-[#111827] mb-1.5">Password</label>
+                  <input id="si-password" type="password" required autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" className={inputClass} />
+                </div>
+                {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+                <button type="submit" disabled={loading} className={btnPrimary}>
+                  {loading ? 'Signing in…' : 'Sign in'}
+                </button>
+                <button type="button" onClick={() => switchTab('forgot')} className={btnGhost}>
+                  Forgot password?
+                </button>
+              </form>
+            </div>
           )}
 
           {/* Sign Up */}
           {tab === 'signup' && (
-            <form onSubmit={handleSignUp} className="space-y-4">
+            <div className="space-y-4">
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                className="w-full flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-lg border border-[#D1D9E0] bg-white text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] hover:border-[#9BAFC4] transition-colors"
+              >
+                <GoogleIcon />
+                Continue with Google
+              </button>
+              <Divider />
+              <form onSubmit={handleSignUp} className="space-y-4">
               <div>
                 <label htmlFor="su-name" className="block text-sm font-medium text-[#111827] mb-1.5">Full name</label>
                 <input id="su-name" type="text" required autoComplete="name" value={name} onChange={e => setName(e.target.value)} placeholder="Jane Smith" className={inputClass} />
@@ -197,6 +247,7 @@ export default function LoginPage() {
                 {loading ? 'Creating account…' : 'Create account'}
               </button>
             </form>
+            </div>
           )}
 
           {/* Forgot Password */}
