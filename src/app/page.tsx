@@ -3,11 +3,20 @@ import Link from 'next/link'
 import { Suspense } from 'react'
 import { CompanyLogo } from '@/components/CompanyLogo'
 import { SearchBar } from '@/components/SearchBar'
+import { FilterBar } from '@/components/FilterBar'
 
 export const dynamic = 'force-dynamic'
 
-async function getListings() {
-  const { data, error } = await supabase
+async function getListings({
+  seniority,
+  region,
+  category,
+}: {
+  seniority?: string
+  region?: string
+  category?: string
+}) {
+  let query = supabase
     .from('listings')
     .select(`
       id,
@@ -30,6 +39,13 @@ async function getListings() {
     `)
     .eq('is_active', true)
     .order('date_added', { ascending: false })
+    .limit(200)
+
+  if (seniority) query = query.eq('seniority', seniority)
+  if (region) query = query.eq('region_eligibility', region)
+  if (category) query = query.eq('category', category)
+
+  const { data, error } = await query
 
   if (error) {
     console.error('Error fetching listings:', error)
@@ -39,32 +55,6 @@ async function getListings() {
 }
 
 type Listing = Awaited<ReturnType<typeof getListings>>[number]
-
-const LOCATION_FILTERS = [
-  { label: 'All', value: '' },
-  { label: 'Worldwide', value: 'Worldwide' },
-  { label: 'USA', value: 'USA' },
-  { label: 'UK', value: 'UK' },
-  { label: 'EMEA', value: 'EMEA' },
-  { label: 'APAC', value: 'APAC' },
-]
-
-const WORK_TYPE_FILTERS = [
-  { label: 'All', value: '' },
-  { label: 'Software Dev', value: 'Software Development' },
-  { label: 'Sales', value: 'Sales' },
-  { label: 'Marketing', value: 'Marketing' },
-  { label: 'HR', value: 'HR' },
-  { label: 'Legal', value: 'Legal' },
-  { label: 'Finance', value: 'Finance' },
-]
-
-const SENIORITY_FILTERS = [
-  { label: 'All', value: '' },
-  { label: 'Entry-level', value: 'entry' },
-  { label: 'Mid-level', value: 'mid' },
-  { label: 'Senior', value: 'senior' },
-]
 
 function VerifiedBadge() {
   return (
@@ -250,39 +240,24 @@ export default async function HomePage({
   searchParams: Promise<{ q?: string; seniority?: string; region?: string; category?: string }>
 }) {
   const { q, seniority, region, category } = await searchParams
-  const listings = await getListings()
 
-  const filtered = listings.filter((l) => {
-    if (seniority && l.seniority !== seniority) return false
-    if (region && l.region_eligibility !== region) return false
-    if (category && (l as { category?: string | null }).category !== category) return false
-    if (q) {
-      const s = q.toLowerCase()
-      const co = Array.isArray(l.companies) ? l.companies[0] : l.companies
-      if (
-        !l.title.toLowerCase().includes(s) &&
-        !co?.name?.toLowerCase().includes(s) &&
-        !l.tags?.some((t: string) => t.toLowerCase().includes(s))
-      )
-        return false
-    }
-    return true
-  })
+  // Filtering by seniority/region/category happens server-side in the Supabase query.
+  // Only the text search (q) is applied in-memory, against an already-filtered subset.
+  const listings = await getListings({ seniority, region, category })
+
+  const filtered = q
+    ? listings.filter((l) => {
+        const s = q.toLowerCase()
+        const co = Array.isArray(l.companies) ? l.companies[0] : l.companies
+        return (
+          l.title.toLowerCase().includes(s) ||
+          co?.name?.toLowerCase().includes(s) ||
+          l.tags?.some((t: string) => t.toLowerCase().includes(s))
+        )
+      })
+    : listings
 
   const hasFilters = !!(q || seniority || region || category)
-
-  function makeParams(overrides: Record<string, string>) {
-    const p = new URLSearchParams()
-    if (q) p.set('q', q)
-    if (seniority) p.set('seniority', seniority)
-    if (region) p.set('region', region)
-    if (category) p.set('category', category)
-    for (const [k, v] of Object.entries(overrides)) {
-      if (v) p.set(k, v)
-      else p.delete(k)
-    }
-    return p.toString()
-  }
 
   return (
     <>
@@ -304,77 +279,14 @@ export default async function HomePage({
       {/* Filter + results */}
       <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8">
 
-        {/* Filter groups */}
-        <div className="space-y-2.5 mb-6">
-
-          {/* Location */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-semibold text-[#6B7A8D] uppercase tracking-wide w-20 shrink-0">
-              Location
-            </span>
-            {LOCATION_FILTERS.map(({ label, value }) => {
-              const isActive = (region ?? '') === value
-              return (
-                <Link
-                  key={value}
-                  href={`/?${makeParams({ region: value })}`}
-                  className={`text-sm px-3 py-1 rounded-full font-medium transition-colors ${
-                    isActive
-                      ? 'bg-[#1A6B4A] text-white'
-                      : 'bg-white text-[#6B7A8D] border border-[#D1D9E0] hover:border-[#9BAFC4] hover:text-[#111827]'
-                  }`}
-                >
-                  {label}
-                </Link>
-              )
-            })}
-          </div>
-
-          {/* Work Type */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-semibold text-[#6B7A8D] uppercase tracking-wide w-20 shrink-0">
-              Work Type
-            </span>
-            {WORK_TYPE_FILTERS.map(({ label, value }) => {
-              const isActive = (category ?? '') === value
-              return (
-                <Link
-                  key={value}
-                  href={`/?${makeParams({ category: value })}`}
-                  className={`text-sm px-3 py-1 rounded-full font-medium transition-colors ${
-                    isActive
-                      ? 'bg-[#111827] text-white'
-                      : 'bg-white text-[#6B7A8D] border border-[#D1D9E0] hover:border-[#9BAFC4] hover:text-[#111827]'
-                  }`}
-                >
-                  {label}
-                </Link>
-              )
-            })}
-          </div>
-
-          {/* Seniority */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-semibold text-[#6B7A8D] uppercase tracking-wide w-20 shrink-0">
-              Seniority
-            </span>
-            {SENIORITY_FILTERS.map(({ label, value }) => {
-              const isActive = (seniority ?? '') === value
-              return (
-                <Link
-                  key={value}
-                  href={`/?${makeParams({ seniority: value })}`}
-                  className={`text-sm px-3 py-1 rounded-full font-medium transition-colors ${
-                    isActive
-                      ? 'bg-[#3B4FBB] text-white'
-                      : 'bg-white text-[#6B7A8D] border border-[#D1D9E0] hover:border-[#9BAFC4] hover:text-[#111827]'
-                  }`}
-                >
-                  {label}
-                </Link>
-              )
-            })}
-          </div>
+        {/* Dropdown filter bar */}
+        <div className="mb-5">
+          <FilterBar
+            region={region ?? ''}
+            category={category ?? ''}
+            seniority={seniority ?? ''}
+            q={q ?? ''}
+          />
         </div>
 
         {/* Results count */}

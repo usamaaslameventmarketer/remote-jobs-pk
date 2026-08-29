@@ -78,15 +78,52 @@ const GREENHOUSE_SLUGS = [
   // General / Other
   'asana', 'pagerduty', '1password', 'notion', 'scale',
   'freshworks', 'pluralsight',
+
+  // --- Expansion: Sales-heavy remote employers ---
+  'docusign', 'ringcentral', 'talkdesk', 'sprinklr', 'seismic',
+  'highspot', 'clari', 'cognism', 'zoominfo', 'chorus',
+  'mindtickle', 'showpad', 'mediafly', 'qatalog', 'memrise',
+
+  // --- Expansion: Marketing-focused remote employers ---
+  'semrush', 'moz', 'omnisend', 'sendgrid', 'postmarkapp',
+  'campaignmonitor', 'drip', 'mailerlite', 'moosend',
+  'unbounce', 'hotjar', 'crazy-egg', 'contentsquare', 'userleap',
+
+  // --- Expansion: Finance / FinTech remote employers ---
+  'expensify', 'bill', 'tipalti', 'coupa', 'zuora',
+  'recurly', 'avalara', 'taxjar', 'ramp', 'airbase',
+  'spendesk', 'pleo', 'payhawk', 'soldo', 'mesh-payments',
+  'netsuite', 'floqast', 'workiva', 'vena',
+
+  // --- Expansion: HR / People Ops remote employers ---
+  'bamboohr', 'justworks', 'zenefits', 'leapsome', 'namely',
+  'peoplehum', 'springworks', 'keka', 'darwinbox', 'oysterhr',
+  'remote-com', 'multiplier', 'velocity-global', 'globalization-partners', 'papaya-global',
+
+  // --- Expansion: Legal remote employers ---
+  'evisort', 'contractbook', 'spotdraft', 'linksquares', 'legalone',
+  'lexion', 'mycase', 'smokeball',
 ]
 
 const LEVER_SLUGS = [
   'toptal', 'canonical', 'zapier', 'buffer', 'doist', 'automattic',
   'hotjar', 'pitch', 'typeform', 'whereby', 'convertkit',
   'deel', 'remote', 'oyster', 'loom',
-  // New additions
+  // Existing additions
   'duckduckgo', 'wikimedia', 'close', 'helpscout', 'percona',
   'invision', 'dbt-labs', 'turing',
+  // Expansion: Sales / Marketing remote employers
+  'talkdesk', 'sprinklr', 'seismic', 'highspot', 'clari',
+  'semrush', 'mailchimp', 'sendgrid', 'omnisend', 'drip',
+  'unbounce', 'hootsuite',
+  // Expansion: Finance remote employers
+  'expensify', 'tipalti', 'recurly', 'ramp', 'spendesk',
+  'pleo', 'vena',
+  // Expansion: HR remote employers
+  'bamboohr', 'leapsome', 'namely', 'greenhouse', 'lever',
+  'oysterhr', 'multiplier',
+  // Expansion: Legal remote employers
+  'contractbook', 'spotdraft', 'evisort', 'lexion',
 ]
 
 // ---------------------------------------------------------------------------
@@ -201,65 +238,32 @@ function classifyRegion(location, source) {
     /worldwide|global|anywhere|international|open globally|location independent|work from anywhere|\bwfa\b|all countries|any country|no geographic restriction|fully remote/.test(stripped)
   ) return 'Worldwide'
 
-  // Pakistan / South Asia (highest priority for this board)
-  if (/pakistan/.test(stripped)) return 'Pakistan'
-  if (/south asia/.test(stripped)) return 'South Asia'
+  // Pakistan / South Asia — open to our audience, treat as Worldwide
+  if (/pakistan|south asia/.test(stripped)) return 'Worldwide'
 
-  // Broad multi-country regions
-  if (/\bemea\b/.test(stripped)) return 'EMEA'
-  if (/\bapac\b|asia[- ]pacific/.test(stripped)) return 'APAC'
-  if (/\b(latam|latin america)\b/.test(stripped)) return 'LATAM'
-  if (/\beurope\b/.test(stripped)) return 'Europe'
-  if (/\bmena\b/.test(stripped)) return 'MENA'
-  if (/\bcea\b/.test(stripped)) return 'CEE'
+  // EMEA — Europe, Middle East, Africa (broad keyword or any specific country)
+  if (
+    /\bemea\b|\bmena\b|\bcea\b|\bcee\b/.test(stripped) ||
+    /\beurope\b/.test(stripped) ||
+    /\b(germany|deutschland|france|netherlands|holland|poland|spain|italy|ireland|portugal|sweden|norway|denmark|finland|romania|czech|switzerland|austria|belgium|greece|hungary|ukraine|israel|turkey|egypt|nigeria|kenya|south africa)\b/.test(stripped)
+  ) return 'EMEA'
 
-  // Country tags — ordered roughly by how often they appear in remote job data
-  if (/\b(usa|united states|u\.s\.|us only)\b/.test(stripped)) return 'USA'
-  if (/\bcanada\b/.test(stripped)) return 'Canada'
+  // APAC — Asia-Pacific (broad keyword or any specific country)
+  if (
+    /\bapac\b|asia[- ]pacific/.test(stripped) ||
+    /\b(india|singapore|japan|south korea|australia|new zealand|philippines|malaysia|indonesia|vietnam|thailand|hong kong)\b/.test(stripped)
+  ) return 'APAC'
+
+  // UK — kept separate (distinct major job market)
   if (/\b(uk|united kingdom|britain|england|great britain)\b/.test(stripped)) return 'UK'
-  if (/\baustralia\b/.test(stripped)) return 'Australia'
-  if (/\b(germany|deutschland)\b/.test(stripped)) return 'Germany'
-  if (/\bfrance\b/.test(stripped)) return 'France'
-  if (/\b(netherlands|holland)\b/.test(stripped)) return 'Netherlands'
-  if (/\bindia\b/.test(stripped)) return 'India'
-  if (/\bireland\b/.test(stripped)) return 'Ireland'
-  if (/\bpoland\b/.test(stripped)) return 'Poland'
-  if (/\bspain\b/.test(stripped)) return 'Spain'
-  if (/\bitaly\b/.test(stripped)) return 'Italy'
-  if (/\bsingapore\b/.test(stripped)) return 'Singapore'
-  if (/\bnew zealand\b/.test(stripped)) return 'New Zealand'
-  if (/\bportugal\b/.test(stripped)) return 'Portugal'
-  if (/\bsweden\b/.test(stripped)) return 'Sweden'
-  if (/\bnorway\b/.test(stripped)) return 'Norway'
-  if (/\bdenmark\b/.test(stripped)) return 'Denmark'
-  if (/\bfinland\b/.test(stripped)) return 'Finland'
-  if (/\bromania\b/.test(stripped)) return 'Romania'
-  if (/\bczech/.test(stripped)) return 'Czech Republic'
-  if (/\bswitzerland\b/.test(stripped)) return 'Switzerland'
-  if (/\baustria\b/.test(stripped)) return 'Austria'
-  if (/\belgium\b/.test(stripped)) return 'Belgium'
-  if (/\bgreece\b/.test(stripped)) return 'Greece'
-  if (/\bhungary\b/.test(stripped)) return 'Hungary'
-  if (/\bukraine\b/.test(stripped)) return 'Ukraine'
-  if (/\bisrael\b/.test(stripped)) return 'Israel'
-  if (/\bturkey\b/.test(stripped)) return 'Turkey'
-  if (/\bjapan\b/.test(stripped)) return 'Japan'
-  if (/\bsouth korea\b/.test(stripped)) return 'South Korea'
-  if (/\bphilippines\b/.test(stripped)) return 'Philippines'
-  if (/\bmalaysia\b/.test(stripped)) return 'Malaysia'
-  if (/\bindonesia\b/.test(stripped)) return 'Indonesia'
-  if (/\bvietnam\b/.test(stripped)) return 'Vietnam'
-  if (/\bthailand\b/.test(stripped)) return 'Thailand'
-  if (/\bhong kong\b/.test(stripped)) return 'Hong Kong'
-  if (/\bmexic/.test(stripped)) return 'Mexico'
-  if (/\bbrazil\b/.test(stripped)) return 'Brazil'
-  if (/\bargentina\b/.test(stripped)) return 'Argentina'
-  if (/\bcolombia\b/.test(stripped)) return 'Colombia'
-  if (/\bchile\b/.test(stripped)) return 'Chile'
-  if (/\bnigeria\b/.test(stripped)) return 'Nigeria'
-  if (/\bsouth africa\b/.test(stripped)) return 'South Africa'
-  if (/\bkenya\b/.test(stripped)) return 'Kenya'
-  if (/\begypt\b/.test(stripped)) return 'Egypt'
+
+  // USA — covers all Americas (US, Canada, LATAM)
+  if (
+    /\b(usa|united states|u\.s\.|us only)\b/.test(stripped) ||
+    /\bcanada\b/.test(stripped) ||
+    /\b(latam|latin america)\b/.test(stripped) ||
+    /\b(mexic|brazil|argentina|colombia|chile|peru|ecuador)\b/.test(stripped)
+  ) return 'USA'
 
   // Still has "remote" in the original string — unknown restriction but remote → Worldwide
   if (/remote/i.test(raw)) return 'Worldwide'
@@ -282,7 +286,8 @@ function hasTimezoneRestriction(description) {
 
 // ---------------------------------------------------------------------------
 // Stage 2 — Category filter (exactly 6 allowed)
-// Returns: 'include' | 'exclude' | 'borderline'
+// Returns: category name | 'exclude' | 'borderline'
+// Category names: 'Software Development' | 'Sales' | 'Marketing' | 'HR' | 'Legal' | 'Finance'
 // ---------------------------------------------------------------------------
 
 function classifyCategory(title, tags = [], apiCategory = '') {
@@ -293,28 +298,28 @@ function classifyCategory(title, tags = [], apiCategory = '') {
   if (/customer\s+(service|support|success)|support\s+specialist|help\s+desk|\bux\s+designer\b|\bui\s+designer\b|graphic\s+designer|product\s+(manager|designer|owner|lead)|visual\s+designer|operations\s+manager|project\s+manager|program\s+manager|\bscrum\b|agile\s+coach|technical\s+writer|community\s+manager|social\s+media\s+manager|content\s+creator|data\s+entry|transcri|virtual\s+assistant|supply\s+chain|logistics|procurement|purchasing|copywriter|creative\s+director|store\s+manager|retail|barber|cleaner|cleaning|maintenance\s+(tech|planner|worker)|room\s+attendant|bell\s+(person|hop)|lifeguard|painter\b|sandblaster|infanteer|surveyor|estimator|porter\b|coffee\s+roaster|merchandis|loss\s+prevention|facilities\s+planner|operator\s+sewing|sub\s+agent|general\s+manager|cabin\s+clean/i.test(t)) return 'exclude'
 
   // ── Software Development / Engineering ──────────────────────────────────
-  if (/\b(software\s+engineer|software\s+developer|software\s+architect|web\s+developer|backend\s+engineer|frontend\s+engineer|front.?end\s+engineer|full.?stack\s+engineer|full.?stack\s+developer|mobile\s+engineer|mobile\s+developer|ios\s+engineer|android\s+engineer|devops\s+engineer|\bsre\b|site\s+reliability\s+engineer|platform\s+engineer|data\s+engineer|ml\s+engineer|machine\s+learning\s+engineer|ai\s+engineer|security\s+engineer|network\s+engineer|solutions\s+architect|cloud\s+engineer|cloud\s+architect|firmware\s+engineer|embedded\s+engineer|blockchain\s+developer|data\s+scientist|programmer|developer|qa\s+engineer|quality\s+engineer|database\s+admin|\bdba\b|\bdevops\b|\bsysadmin\b)\b/i.test(t)) return 'include'
-  if (/\bsoftware.?dev(elopment)?\b|\bdevops\b|\bsysadmin\b|\bdata\s+science\b|\bmachine\s+learning\b/i.test(cat)) return 'include'
+  if (/\b(software\s+engineer|software\s+developer|software\s+architect|web\s+developer|backend\s+engineer|frontend\s+engineer|front.?end\s+engineer|full.?stack\s+engineer|full.?stack\s+developer|mobile\s+engineer|mobile\s+developer|ios\s+engineer|android\s+engineer|devops\s+engineer|\bsre\b|site\s+reliability\s+engineer|platform\s+engineer|data\s+engineer|ml\s+engineer|machine\s+learning\s+engineer|ai\s+engineer|security\s+engineer|network\s+engineer|solutions\s+architect|cloud\s+engineer|cloud\s+architect|firmware\s+engineer|embedded\s+engineer|blockchain\s+developer|data\s+scientist|programmer|developer|qa\s+engineer|quality\s+engineer|database\s+admin|\bdba\b|\bdevops\b|\bsysadmin\b)\b/i.test(t)) return 'Software Development'
+  if (/\bsoftware.?dev(elopment)?\b|\bdevops\b|\bsysadmin\b|\bdata\s+science\b|\bmachine\s+learning\b/i.test(cat)) return 'Software Development'
 
   // ── Sales ────────────────────────────────────────────────────────────────
-  if (/\bsales\b|account\s+executive|account\s+manager|business\s+development|\bbdr\b|\bsdr\b|\badr\b|revenue\s+operations|\brevops\b|sales\s+engineer|inside\s+sales/i.test(t)) return 'include'
-  if (/\bsales\b/i.test(cat) && !/engineer|software|developer/i.test(t)) return 'include'
+  if (/\bsales\b|account\s+executive|account\s+manager|business\s+development|\bbdr\b|\bsdr\b|\badr\b|revenue\s+operations|\brevops\b|sales\s+engineer|inside\s+sales/i.test(t)) return 'Sales'
+  if (/\bsales\b/i.test(cat) && !/engineer|software|developer/i.test(t)) return 'Sales'
 
   // ── Marketing ────────────────────────────────────────────────────────────
-  if (/\bmarketing\b|\bseo\b|content\s+market|email\s+market|digital\s+market|growth\s+market|brand\s+manager|demand\s+gen(eration)?|performance\s+market|paid\s+(media|social|search|ads)|affiliate\s+market/i.test(t)) return 'include'
-  if (/\bmarketing\b/i.test(cat) && /\bmarketing\b/i.test(t)) return 'include'
+  if (/\bmarketing\b|\bseo\b|content\s+market|email\s+market|digital\s+market|growth\s+market|brand\s+manager|demand\s+gen(eration)?|performance\s+market|paid\s+(media|social|search|ads)|affiliate\s+market/i.test(t)) return 'Marketing'
+  if (/\bmarketing\b/i.test(cat) && /\bmarketing\b/i.test(t)) return 'Marketing'
 
   // ── HR / Human Resources ─────────────────────────────────────────────────
-  if (/human\s+resources|\bhr\b|recruiter|recruiting|talent\s+acquisition|people\s+ops|people\s+operations|hr\s+manager|hr\s+director|workforce\s+planning|\bhrbp\b|compensation\s+&\s+benefits|employee\s+relations/i.test(t)) return 'include'
-  if (/\bhuman\s+resources\b|\brecruiter\b|\btalent\s+acquisition\b/i.test(cat)) return 'include'
+  if (/human\s+resources|\bhr\b|recruiter|recruiting|talent\s+acquisition|people\s+ops|people\s+operations|hr\s+manager|hr\s+director|workforce\s+planning|\bhrbp\b|compensation\s+&\s+benefits|employee\s+relations/i.test(t)) return 'HR'
+  if (/\bhuman\s+resources\b|\brecruiter\b|\btalent\s+acquisition\b/i.test(cat)) return 'HR'
 
   // ── Legal ────────────────────────────────────────────────────────────────
-  if (/\blegal\b|\bcounsel\b|compliance\s+officer|paralegal|\battorney\b|\blawyer\b|contract\s+manager|general\s+counsel|in.?house\s+counsel|gdpr|privacy\s+counsel|legal\s+ops/i.test(t)) return 'include'
-  if (/\blegal\b/i.test(cat) && /\blegal\b|\bcounsel\b|\bcompliance\b|\bparalegal\b|\battorney\b/i.test(t)) return 'include'
+  if (/\blegal\b|\bcounsel\b|compliance\s+officer|paralegal|\battorney\b|\blawyer\b|contract\s+manager|general\s+counsel|in.?house\s+counsel|gdpr|privacy\s+counsel|legal\s+ops/i.test(t)) return 'Legal'
+  if (/\blegal\b/i.test(cat) && /\blegal\b|\bcounsel\b|\bcompliance\b|\bparalegal\b|\battorney\b/i.test(t)) return 'Legal'
 
   // ── Finance ──────────────────────────────────────────────────────────────
-  if (/\bfinance\b|\bfinancial\b|accountant|accounting|\bcfo\b|\bcontroller\b|\bfp&a\b|\bfpa\b|bookkeeper|payroll|treasury|tax\s+specialist|financial\s+analyst|revenue\s+analyst|financial\s+controller|\baudit\b|financial\s+reporting/i.test(t)) return 'include'
-  if (/\bfinance\b|\baccounting\b/i.test(cat) && /\bfinance\b|\bfinancial\b|\baccountant\b|\baccounting\b|\bpayroll\b|\baudit\b/i.test(t)) return 'include'
+  if (/\bfinance\b|\bfinancial\b|accountant|accounting|\bcfo\b|\bcontroller\b|\bfp&a\b|\bfpa\b|bookkeeper|payroll|treasury|tax\s+specialist|financial\s+analyst|revenue\s+analyst|financial\s+controller|\baudit\b|financial\s+reporting/i.test(t)) return 'Finance'
+  if (/\bfinance\b|\baccounting\b/i.test(cat) && /\bfinance\b|\bfinancial\b|\baccountant\b|\baccounting\b|\bpayroll\b|\baudit\b/i.test(t)) return 'Finance'
 
   // ── Secondary exclude by api_category (if clearly out of scope) ──────────
   if (/customer.?service|support|design|product\s+management|content\s+writing|writing/i.test(cat) && !/marketing|finance|legal|hr|sales|software|engineering/i.test(cat)) return 'exclude'
@@ -345,8 +350,8 @@ INCLUDE only if BOTH conditions are true:
 2. REGION — the role is open to one of:
    • Worldwide / Anywhere / Fully Remote (no country restriction)
    • Explicitly names Pakistan or South Asia as eligible
-   • Broad multi-country region: EMEA or APAC specifically (not plain "Europe" or "Asia" alone)
-   Do NOT include: roles restricted to a single country other than Pakistan (e.g. "Remote - UK", "US only", "must be based in Germany"), or plain continent labels like "Europe (Remote)" without EMEA/APAC framing. Also EXCLUDE if the description requires working specific hours in a timezone that effectively excludes Pakistani candidates (e.g. "must be available 9am-5pm EST", "US business hours required").
+   • Any country/region (USA, UK, EMEA, APAC, Canada, India, etc.) — region-restricted listings are now accepted
+   EXCLUDE only if: the description requires working specific hours in a timezone that effectively excludes Pakistani candidates (e.g. "must be available 9am-5pm EST", "US business hours required").
 
 Title: ${listing.title}
 Category/Tags: ${(listing.tags ?? []).join(', ')}
@@ -354,15 +359,17 @@ Company: ${listing.company_name}
 Region/Location: ${listing.region}
 Description: ${(listing.short_summary ?? '').slice(0, 400)}
 
-Reply with ONLY "include" or "exclude".`
+Reply with ONLY one of these exact strings: "Software Development", "Sales", "Marketing", "HR", "Legal", "Finance", or "exclude".`
 
   try {
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 10,
+      max_tokens: 20,
       messages: [{ role: 'user', content: prompt }],
     })
-    return msg.content[0].text.trim().toLowerCase() === 'include' ? 'include' : 'exclude'
+    const reply = msg.content[0].text.trim()
+    const VALID = ['Software Development', 'Sales', 'Marketing', 'HR', 'Legal', 'Finance']
+    return VALID.find((c) => reply.toLowerCase() === c.toLowerCase()) ?? 'exclude'
   } catch (err) {
     console.error('  Claude error:', err.message)
     return 'exclude' // safe default — exclude on error rather than pollute feed
@@ -656,6 +663,32 @@ async function fetchGreenhouse() {
     paddle: 'Paddle', xero: 'Xero', chargebee: 'Chargebee', plaid: 'Plaid',
     nubank: 'Nubank', wise: 'Wise', carta: 'Carta', pilot: 'Pilot',
     freshworks: 'Freshworks', pluralsight: 'Pluralsight',
+    // Expansion: Sales
+    docusign: 'DocuSign', ringcentral: 'RingCentral', talkdesk: 'Talkdesk',
+    sprinklr: 'Sprinklr', seismic: 'Seismic', highspot: 'Highspot',
+    clari: 'Clari', cognism: 'Cognism', zoominfo: 'ZoomInfo', chorus: 'Chorus.ai',
+    mindtickle: 'Mindtickle', showpad: 'Showpad', mediafly: 'Mediafly',
+    qatalog: 'Qatalog', memrise: 'Memrise',
+    // Expansion: Marketing
+    semrush: 'Semrush', moz: 'Moz', omnisend: 'Omnisend', sendgrid: 'SendGrid',
+    postmarkapp: 'Postmark', campaignmonitor: 'Campaign Monitor', drip: 'Drip',
+    mailerlite: 'MailerLite', moosend: 'Moosend', unbounce: 'Unbounce',
+    hotjar: 'Hotjar', contentsquare: 'Contentsquare', userleap: 'Sprig',
+    // Expansion: Finance
+    expensify: 'Expensify', bill: 'Bill.com', tipalti: 'Tipalti',
+    coupa: 'Coupa', zuora: 'Zuora', recurly: 'Recurly', avalara: 'Avalara',
+    taxjar: 'TaxJar', ramp: 'Ramp', airbase: 'Airbase', spendesk: 'Spendesk',
+    pleo: 'Pleo', payhawk: 'Payhawk', soldo: 'Soldo', netsuite: 'NetSuite',
+    floqast: 'FloQast', workiva: 'Workiva', vena: 'Vena Solutions',
+    // Expansion: HR
+    bamboohr: 'BambooHR', justworks: 'Justworks', zenefits: 'Zenefits',
+    leapsome: 'Leapsome', namely: 'Namely', peoplehum: 'peopleHum',
+    springworks: 'Springworks', keka: 'Keka', darwinbox: 'Darwinbox',
+    oysterhr: 'Oyster HR', multiplier: 'Multiplier',
+    // Expansion: Legal
+    evisort: 'Evisort', contractbook: 'Contractbook', spotdraft: 'SpotDraft',
+    linksquares: 'LinkSquares', lexion: 'Lexion',
+    mycase: 'MyCase', smokeball: 'Smokeball',
   }
 
   await Promise.allSettled(
@@ -716,10 +749,25 @@ async function fetchLever() {
     hotjar: 'Hotjar', remote: 'Remote.com', loom: 'Loom', pitch: 'Pitch',
     miro: 'Miro', typeform: 'Typeform', whereby: 'Whereby', convertkit: 'ConvertKit',
     oyster: 'Oyster HR',
-    // New additions
+    // Existing additions
     duckduckgo: 'DuckDuckGo', wikimedia: 'Wikimedia Foundation',
     close: 'Close', helpscout: 'Help Scout', percona: 'Percona',
     'dbt-labs': 'dbt Labs', turing: 'Turing',
+    // Expansion: Sales / Marketing
+    talkdesk: 'Talkdesk', sprinklr: 'Sprinklr', seismic: 'Seismic',
+    highspot: 'Highspot', clari: 'Clari', semrush: 'Semrush',
+    mailchimp: 'Mailchimp', sendgrid: 'SendGrid', omnisend: 'Omnisend',
+    drip: 'Drip', unbounce: 'Unbounce', hootsuite: 'Hootsuite',
+    // Expansion: Finance
+    expensify: 'Expensify', tipalti: 'Tipalti', recurly: 'Recurly',
+    ramp: 'Ramp', spendesk: 'Spendesk', pleo: 'Pleo', vena: 'Vena Solutions',
+    // Expansion: HR
+    bamboohr: 'BambooHR', leapsome: 'Leapsome', namely: 'Namely',
+    greenhouse: 'Greenhouse', lever: 'Lever', oysterhr: 'Oyster HR',
+    multiplier: 'Multiplier',
+    // Expansion: Legal
+    contractbook: 'Contractbook', spotdraft: 'SpotDraft',
+    evisort: 'Evisort', lexion: 'Lexion',
   }
 
   await Promise.allSettled(
@@ -908,7 +956,7 @@ async function ingest() {
   // Process region-passed jobs through category filter
   for (const j of afterRegion) {
     const verdict = classifyCategory(j.title, j.tags, j.api_category)
-    if (verdict === 'include') include.push(j)
+    if (verdict !== 'exclude' && verdict !== 'borderline') { j._category = verdict; include.push(j) }
     else if (verdict === 'borderline') borderline.push(j)
     else {
       categoryRejected++
@@ -919,7 +967,8 @@ async function ingest() {
   // TZ-flagged jobs also go through category filter first, then to Claude
   for (const j of timezoneBorderline) {
     const verdict = classifyCategory(j.title, j.tags, j.api_category)
-    if (verdict === 'include' || verdict === 'borderline') borderline.push(j) // Claude will re-check TZ
+    if (verdict !== 'exclude' && verdict !== 'borderline') borderline.push(j) // Claude will re-check TZ
+    else if (verdict === 'borderline') borderline.push(j)
     else {
       categoryRejected++
       catRejectedBySource[j._source] = (catRejectedBySource[j._source] ?? 0) + 1
@@ -953,7 +1002,7 @@ async function ingest() {
           short_summary: j.short_summary,
         })
         console.log(verdict)
-        if (verdict === 'include') { include.push(j); claudeIncluded++ }
+        if (verdict !== 'exclude') { j._category = verdict; include.push(j); claudeIncluded++ }
         else claudeExcluded++
       }
       console.log(`  Claude result: ${claudeIncluded} included, ${claudeExcluded} excluded`)
@@ -1004,6 +1053,7 @@ async function ingest() {
       seniority: job.seniority,
       location_type: 'remote',
       region_eligibility: job._region,
+      category: job._category ?? null,
       tags: job.tags,
       salary_range: job.salary_range,
       short_summary: job.short_summary || 'No description available.',
