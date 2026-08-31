@@ -1,7 +1,9 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { CompanyLogo } from './CompanyLogo'
+import { supabase } from '@/lib/supabase'
 
 const FREE_COUNT = 5
 
@@ -121,7 +123,7 @@ function JobCard({ listing }: { listing: ListingRow }) {
   )
 }
 
-function PaywallGate({ lockedCount }: { lockedCount: number }) {
+function PaywallGate({ lockedCount, isLoggedIn }: { lockedCount: number; isLoggedIn: boolean }) {
   return (
     <div className="rounded-xl border-2 border-[#1A6B4A] bg-gradient-to-b from-[#F0FAF5] to-white p-7 text-center my-2">
       <div className="w-11 h-11 rounded-full bg-[#1A6B4A] flex items-center justify-center mx-auto mb-4">
@@ -136,26 +138,82 @@ function PaywallGate({ lockedCount }: { lockedCount: number }) {
       <p className="text-sm text-[#6B7A8D] mb-5 max-w-xs mx-auto">
         Every role is manually curated for Pakistan-based talent. Subscribe to unlock the full board.
       </p>
-      <Link
-        href="/pricing"
-        className="inline-flex items-center gap-2 bg-[#1A6B4A] text-white text-sm font-semibold px-6 py-2.5 rounded-lg hover:bg-[#155a3d] transition-colors"
-      >
-        Unlock full access — 2,000 PKR/month
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <line x1="5" y1="12" x2="19" y2="12" />
-          <polyline points="12 5 19 12 12 19" />
-        </svg>
-      </Link>
-      <p className="text-xs text-[#9BAFC4] mt-3">Payment coming soon — join the waitlist on the pricing page</p>
+      {isLoggedIn ? (
+        <>
+          <Link
+            href="/pricing"
+            className="inline-flex items-center gap-2 bg-[#1A6B4A] text-white text-sm font-semibold px-6 py-2.5 rounded-lg hover:bg-[#155a3d] transition-colors"
+          >
+            Unlock full access — 2,000 PKR/month
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
+          </Link>
+          <p className="text-xs text-[#9BAFC4] mt-3">Payment coming soon — join the waitlist on the pricing page</p>
+        </>
+      ) : (
+        <>
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-2 bg-[#1A6B4A] text-white text-sm font-semibold px-6 py-2.5 rounded-lg hover:bg-[#155a3d] transition-colors"
+          >
+            Sign in to subscribe
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
+          </Link>
+          <p className="text-xs text-[#9BAFC4] mt-3">
+            No account?{' '}
+            <Link href="/signup" className="underline hover:text-[#6B7A8D]">Create one free</Link>
+            {' '}— then join the waitlist
+          </p>
+        </>
+      )}
     </div>
   )
 }
 
 export function ListingGrid({ listings }: { listings: ListingRow[] }) {
-  const free = listings.slice(0, FREE_COUNT)
-  const locked = listings.slice(FREE_COUNT)
+  // null = still checking, true/false = resolved
+  const [isPro, setIsPro] = useState<boolean | null>(null)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+
+  useEffect(() => {
+    async function checkAccess() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        setIsLoggedIn(false)
+        setIsPro(false)
+        return
+      }
+      setIsLoggedIn(true)
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_pro')
+        .eq('id', session.user.id)
+        .single()
+      setIsPro(profile?.is_pro ?? false)
+    }
+    checkAccess()
+  }, [])
 
   if (listings.length === 0) return null
+
+  // Pro users see everything
+  if (isPro === true) {
+    return (
+      <div className="space-y-3">
+        {listings.map((listing) => (
+          <JobCard key={listing.id} listing={listing} />
+        ))}
+      </div>
+    )
+  }
+
+  const free = listings.slice(0, FREE_COUNT)
+  const locked = listings.slice(FREE_COUNT)
 
   return (
     <div className="space-y-3">
@@ -163,9 +221,10 @@ export function ListingGrid({ listings }: { listings: ListingRow[] }) {
         <JobCard key={listing.id} listing={listing} />
       ))}
 
-      {locked.length > 0 && (
+      {/* Show gate only once we know user isn't pro (avoid flash) */}
+      {locked.length > 0 && isPro === false && (
         <>
-          <PaywallGate lockedCount={locked.length} />
+          <PaywallGate lockedCount={locked.length} isLoggedIn={isLoggedIn} />
 
           {/* Blurred preview of locked listings */}
           <div className="relative overflow-hidden rounded-xl" style={{ maxHeight: '520px' }}>
@@ -179,7 +238,6 @@ export function ListingGrid({ listings }: { listings: ListingRow[] }) {
                 </div>
               ))}
             </div>
-            {/* Gradient fade */}
             <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-b from-transparent to-white pointer-events-none" />
           </div>
         </>
