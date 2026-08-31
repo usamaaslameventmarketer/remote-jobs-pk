@@ -39,6 +39,7 @@ async function getListings({
     `)
     .eq('is_active', true)
     .order('date_added', { ascending: false })
+    .range(0, 4999)
 
   if (seniority) query = query.eq('seniority', seniority)
   if (region) query = query.eq('region_eligibility', region)
