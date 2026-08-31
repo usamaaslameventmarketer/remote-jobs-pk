@@ -71,6 +71,12 @@ export function Nav() {
           >
             Companies
           </Link>
+          <Link
+            href="/pricing"
+            className="text-sm text-[#8BAFC9] hover:text-white transition-colors font-medium"
+          >
+            Pricing
+          </Link>
         </div>
 
         <div className="flex items-center gap-3">
