@@ -1,6 +1,9 @@
 /**
- * Ingestion pipeline — Remotive, Arbeitnow, RemoteOK, Himalayas, WorkingNomads,
- *                      Greenhouse, Lever
+ * Ingestion pipeline — Greenhouse, Lever (direct company ATS boards only)
+ *
+ * Aggregator sources (Remotive, Arbeitnow, RemoteOK, Himalayas, WorkingNomads,
+ * Jobicy) were removed: none of their APIs expose a direct company apply URL,
+ * so all links pointed back to the aggregator's own listing page.
  *
  * Four-stage filter:
  *   0. Language filter  — reject non-English titles/descriptions
@@ -193,9 +196,8 @@ function isEnglish(title, description) {
 // null  : Single-country restriction (not Pakistan) → REJECT
 // ---------------------------------------------------------------------------
 
-// Aggregator sources pre-filter for remote jobs — any location they return is a
-// region restriction, not an in-office signal.
-const REMOTE_AGGREGATORS = new Set(['Remotive', 'Arbeitnow', 'RemoteOK', 'Himalayas', 'WorkingNomads', 'Jobicy'])
+// Greenhouse and Lever are direct ATS sources — all locations are inspected for remote signals.
+const REMOTE_AGGREGATORS = new Set() // no aggregator sources remain; kept to avoid refactoring classifyRegion
 
 /**
  * Classify a job's location into a human-readable region tag.
@@ -429,201 +431,6 @@ async function upsertCompany({ name, logo_url, website }) {
 }
 
 // ---------------------------------------------------------------------------
-// Sources — aggregators
-// ---------------------------------------------------------------------------
-
-async function fetchRemotive() {
-  process.stdout.write('[Remotive] Fetching... ')
-  const res = await fetch('https://remotive.com/api/remote-jobs?limit=300', { headers: { 'User-Agent': 'RemoteJobsPK/1.0' } })
-  if (!res.ok) throw new Error(`Remotive HTTP ${res.status}`)
-  const { jobs } = await res.json()
-  const out = jobs.filter((j) => j.url).map((j) => ({
-    _source: 'Remotive',
-    title: j.title,
-    company_name: j.company_name,
-    company_logo: j.company_logo_url || null,
-    company_website: j.company_url || null,
-    original_url: j.url,
-    tags: (j.tags ?? []).slice(0, 8),
-    api_category: j.category ?? '',
-    location: j.candidate_required_location ?? '',
-    salary_range: j.salary || null,
-    short_summary: stripHtml(j.description),
-    date_posted: j.publication_date?.split('T')[0] ?? null,
-    seniority: deriveSeniority(j.title),
-  }))
-  console.log(`${out.length} raw jobs`)
-  return out
-}
-
-async function fetchArbeitnow() {
-  console.log('[Arbeitnow] Fetching (8 pages)...')
-  const pages = [1, 2, 3, 4, 5, 6, 7, 8]
-  const allJobs = []
-
-  for (const page of pages) {
-    try {
-      process.stdout.write(`  Page ${page}... `)
-      const res = await fetch(
-        `https://www.arbeitnow.com/api/job-board-api?page=${page}`,
-        { headers: { 'User-Agent': 'RemoteJobsPK/1.0' }, signal: AbortSignal.timeout(10000) }
-      )
-      if (!res.ok) { console.log(`HTTP ${res.status} — stopping`); break }
-      const { data: jobs } = await res.json()
-      if (!Array.isArray(jobs) || jobs.length === 0) { console.log('no jobs — stopping'); break }
-      const remote = jobs.filter((j) => j.url && j.remote).map((j) => ({
-        _source: 'Arbeitnow',
-        title: j.title,
-        company_name: j.company_name,
-        company_logo: null,
-        company_website: null,
-        original_url: j.url,
-        tags: (j.tags ?? []).slice(0, 8),
-        api_category: (j.tags ?? []).join(' '),
-        location: '',
-        salary_range: null,
-        short_summary: stripHtml(j.description),
-        date_posted: j.created_at ? new Date(j.created_at * 1000).toISOString().split('T')[0] : null,
-        seniority: deriveSeniority(j.title),
-      }))
-      console.log(`${remote.length} remote jobs`)
-      allJobs.push(...remote)
-    } catch (err) {
-      console.log(`error (${err.message}) — stopping`)
-      break
-    }
-  }
-
-  console.log(`[Arbeitnow] Done — ${allJobs.length} raw jobs total`)
-  return allJobs
-}
-
-async function fetchRemoteOK() {
-  process.stdout.write('[RemoteOK] Fetching... ')
-  const res = await fetch('https://remoteok.com/api', { headers: { 'User-Agent': 'RemoteJobsPK/1.0 (remotejobs.pk)' } })
-  if (!res.ok) throw new Error(`RemoteOK HTTP ${res.status}`)
-  const raw = await res.json()
-  const out = raw.slice(1).filter((j) => j.position && j.url).map((j) => ({
-    _source: 'RemoteOK',
-    title: j.position,
-    company_name: j.company,
-    company_logo: j.company_logo || null,
-    company_website: null,
-    original_url: j.url,
-    tags: (j.tags ?? []).slice(0, 8),
-    api_category: (j.tags ?? []).join(' '),
-    location: j.location ?? '',
-    salary_range: j.salary_min ? `$${Number(j.salary_min).toLocaleString()}–$${Number(j.salary_max).toLocaleString()}/yr` : null,
-    short_summary: stripHtml(j.description),
-    date_posted: j.date?.split('T')[0] ?? null,
-    seniority: deriveSeniority(j.position),
-  }))
-  console.log(`${out.length} raw jobs`)
-  return out
-}
-
-async function fetchHimalayas() {
-  process.stdout.write('[Himalayas] Fetching... ')
-  try {
-    const res = await fetch(
-      'https://himalayas.app/jobs/api?limit=300',
-      { headers: { 'User-Agent': 'RemoteJobsPK/1.0' }, signal: AbortSignal.timeout(15000) }
-    )
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const body = await res.json()
-    const jobs = body.jobs ?? body ?? []
-    if (!Array.isArray(jobs)) throw new Error('Unexpected response shape')
-    const out = jobs.filter((j) => j.applicationLink || j.url).map((j) => ({
-      _source: 'Himalayas',
-      title: j.title ?? '',
-      company_name: j.company?.name ?? j.companyName ?? 'Unknown',
-      company_logo: j.company?.logo ?? j.companyLogo ?? null,
-      company_website: j.company?.website ?? j.companyWebsite ?? null,
-      original_url: j.applicationLink ?? j.url,
-      tags: (j.tags ?? j.categories ?? []).slice(0, 8),
-      api_category: (j.categories ?? []).join(' '),
-      location: j.location ?? j.regions ?? '',
-      salary_range: j.salary ?? null,
-      short_summary: stripHtml(j.shortDescription ?? j.description ?? ''),
-      date_posted: j.publishedAt ? j.publishedAt.split('T')[0] : null,
-      seniority: deriveSeniority(j.title ?? ''),
-    }))
-    console.log(`${out.length} raw jobs`)
-    return out
-  } catch (err) {
-    console.log(`FAILED (${err.message}) — skipping`)
-    return []
-  }
-}
-
-async function fetchWorkingNomads() {
-  process.stdout.write('[WorkingNomads] Fetching... ')
-  try {
-    const res = await fetch(
-      'https://www.workingnomads.com/api/exposed_jobs/',
-      { headers: { 'User-Agent': 'RemoteJobsPK/1.0' }, signal: AbortSignal.timeout(15000) }
-    )
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const jobs = await res.json()
-    if (!Array.isArray(jobs)) throw new Error('Unexpected response shape')
-    const out = jobs.filter((j) => j.url).map((j) => ({
-      _source: 'WorkingNomads',
-      title: j.title ?? '',
-      company_name: j.company ?? 'Unknown',
-      company_logo: j.company_logo_url ?? null,
-      company_website: null,
-      original_url: j.url,
-      tags: [],
-      api_category: j.category?.name ?? '',
-      location: j.region ?? j.location ?? '',
-      salary_range: j.salary || null,
-      short_summary: stripHtml(j.description ?? ''),
-      date_posted: j.pub_date ? j.pub_date.split('T')[0] : null,
-      seniority: deriveSeniority(j.title ?? ''),
-    }))
-    console.log(`${out.length} raw jobs`)
-    return out
-  } catch (err) {
-    console.log(`FAILED (${err.message}) — skipping`)
-    return []
-  }
-}
-
-async function fetchJobicy() {
-  process.stdout.write('[Jobicy] Fetching... ')
-  try {
-    const res = await fetch(
-      'https://jobicy.com/api/v2/remote-jobs?count=50',
-      { headers: { 'User-Agent': 'RemoteJobsPK/1.0' }, signal: AbortSignal.timeout(15000) }
-    )
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const body = await res.json()
-    const jobs = body.jobs ?? body ?? []
-    if (!Array.isArray(jobs)) throw new Error('Unexpected response shape')
-    const out = jobs.filter((j) => j.url).map((j) => ({
-      _source: 'Jobicy',
-      title: j.jobTitle ?? j.title ?? '',
-      company_name: j.companyName ?? j.company ?? 'Unknown',
-      company_logo: j.companyLogo ?? j.company_logo ?? null,
-      company_website: j.companyUrl ?? null,
-      original_url: j.url,
-      tags: [...(j.jobIndustry ?? []), ...(j.jobType ?? [])].slice(0, 8),
-      api_category: (j.jobIndustry ?? []).join(' '),
-      location: j.jobGeo ?? j.location ?? '',
-      salary_range: null,
-      short_summary: stripHtml(j.jobExcerpt ?? j.description ?? ''),
-      date_posted: j.pubDate ? j.pubDate.split(' ')[0] : null,
-      seniority: deriveSeniority(j.jobTitle ?? j.title ?? ''),
-    }))
-    console.log(`${out.length} raw jobs`)
-    return out
-  } catch (err) {
-    console.log(`FAILED (${err.message}) — skipping`)
-    return []
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Sources — direct company boards (Greenhouse + Lever)
 // ---------------------------------------------------------------------------
 
@@ -854,12 +661,6 @@ async function ingest() {
   const sourceResults = {}
 
   for (const [name, fn] of [
-    ['Remotive', fetchRemotive],
-    ['Arbeitnow', fetchArbeitnow],
-    ['RemoteOK', fetchRemoteOK],
-    ['Himalayas', fetchHimalayas],
-    ['WorkingNomads', fetchWorkingNomads],
-    ['Jobicy', fetchJobicy],
     ['Greenhouse', fetchGreenhouse],
     ['Lever', fetchLever],
   ]) {
