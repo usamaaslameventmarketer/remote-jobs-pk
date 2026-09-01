@@ -27,6 +27,8 @@ export type ListingRow = {
   date_added: string
   verified: boolean
   source: string
+  featured: boolean
+  featured_until: string | null
   companies: CompanyRow | CompanyRow[] | null
 }
 
@@ -38,6 +40,17 @@ function VerifiedBadge() {
         <polyline points="9 12 11 14 15 10" />
       </svg>
       Verified
+    </span>
+  )
+}
+
+function FeaturedBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A] text-xs font-semibold">
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+      </svg>
+      Featured
     </span>
   )
 }
@@ -88,10 +101,12 @@ function SeniorityBadge({ seniority }: { seniority: string }) {
 function JobCard({ listing }: { listing: ListingRow }) {
   const company = Array.isArray(listing.companies) ? listing.companies[0] : listing.companies
   const isWorldwide = listing.region_eligibility === 'Worldwide'
+  const today = new Date().toISOString().split('T')[0]
+  const isFeaturedActive = listing.featured && listing.featured_until && listing.featured_until >= today
 
   return (
     <Link href={`/listings/${listing.id}`}>
-      <article className="bg-white rounded-xl border border-[#D1D9E0] p-4 sm:p-5 hover:border-[#9BAFC4] hover:shadow-sm transition-all cursor-pointer group">
+      <article className={`bg-white rounded-xl border p-4 sm:p-5 hover:shadow-sm transition-all cursor-pointer group ${isFeaturedActive ? 'border-[#FDE68A] hover:border-[#F59E0B]' : 'border-[#D1D9E0] hover:border-[#9BAFC4]'}`}>
         <div className="flex gap-4">
           <CompanyLogo name={company?.name ?? '?'} logoUrl={company?.logo_url} size={48} />
           <div className="flex-1 min-w-0">
@@ -106,6 +121,7 @@ function JobCard({ listing }: { listing: ListingRow }) {
                 </h2>
               </div>
               <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                {isFeaturedActive && <FeaturedBadge />}
                 {listing.source === 'employer_submitted' && <DirectFromEmployerBadge />}
                 {isWorldwide && <HiresFromPakistanBadge />}
                 {listing.verified && <VerifiedBadge />}

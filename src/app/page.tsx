@@ -31,6 +31,8 @@ async function getListings({
       date_added,
       verified,
       source,
+      featured,
+      featured_until,
       companies (
         id,
         name,
@@ -105,6 +107,14 @@ export default async function HomePage({
 
   const hasFilters = !!(q || seniority || region || category)
 
+  // Pin active featured listings to the top; preserve DB order (date_added desc) within each group
+  const today = new Date().toISOString().split('T')[0]
+  const sorted = [...filtered].sort((a, b) => {
+    const aF = (a as any).featured && (a as any).featured_until >= today ? 1 : 0
+    const bF = (b as any).featured && (b as any).featured_until >= today ? 1 : 0
+    return bF - aF
+  })
+
   return (
     <>
       {/* Search hero */}
@@ -147,7 +157,7 @@ export default async function HomePage({
         {filtered.length === 0 ? (
           <EmptyState hasFilters={hasFilters} />
         ) : (
-          <ListingGrid listings={filtered as any} />
+          <ListingGrid listings={sorted as any} />
         )}
       </div>
     </>

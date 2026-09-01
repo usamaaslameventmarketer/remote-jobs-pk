@@ -128,6 +128,26 @@ SELECT * FROM (VALUES
 SELECT COUNT(*) AS listings_inserted FROM listings;
 
 -- ============================================================
+-- FEATURED LISTINGS + EMPLOYER BUNDLES (run once)
+-- ============================================================
+
+-- Featured placement fields on listings
+alter table listings
+  add column if not exists featured boolean not null default false,
+  add column if not exists featured_until date;
+
+-- One bundle per payment — tracks 5 featured listing credits per employer
+create table if not exists employer_bundles (
+  id                   uuid        primary key default gen_random_uuid(),
+  contact_email        text        not null,
+  credits_total        integer     not null default 5,
+  credits_used         integer     not null default 0,
+  payment_confirmed_at timestamptz,
+  created_at           timestamptz not null default now()
+);
+-- ============================================================
+
+-- ============================================================
 -- POST A JOB SCHEMA (run once — required for employer submissions)
 -- ============================================================
 
