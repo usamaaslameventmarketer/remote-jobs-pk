@@ -4,6 +4,7 @@ import { Suspense } from 'react'
 import { SearchBar } from '@/components/SearchBar'
 import { FilterBar } from '@/components/FilterBar'
 import { ListingGrid } from '@/components/ListingGrid'
+import { AlertSubscribe } from '@/components/AlertSubscribe'
 
 export const dynamic = 'force-dynamic'
 
@@ -129,6 +130,9 @@ export default async function HomePage({
           <Suspense>
             <SearchBar defaultValue={q} />
           </Suspense>
+          <div className="mt-5 flex items-center gap-3 flex-col sm:flex-row max-w-sm mx-auto">
+            <AlertSubscribe />
+          </div>
         </div>
       </div>
 

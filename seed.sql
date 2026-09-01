@@ -194,3 +194,19 @@ drop policy if exists "Admin can update submissions" on submissions;
 create policy "Admin can update submissions" on submissions
   for update using ((auth.jwt() ->> 'email') = 'usama.aslam975@gmail.com');
 -- ============================================================
+
+-- ============================================================
+-- JOB ALERTS (run once — required for email digest feature)
+-- ============================================================
+create table if not exists job_alerts (
+  id                 uuid        primary key default gen_random_uuid(),
+  email              text        not null unique,
+  confirmed          boolean     not null default false,
+  confirm_token      text        not null,
+  unsubscribe_token  text        not null,
+  created_at         timestamptz not null default now()
+);
+
+-- Service role bypasses RLS; disable RLS so anon/public reads aren't needed
+alter table job_alerts disable row level security;
+-- ============================================================
