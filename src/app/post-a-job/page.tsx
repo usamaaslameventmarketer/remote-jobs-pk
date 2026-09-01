@@ -2,6 +2,14 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import {
+  BANK_ACCOUNT_NAME,
+  BANK_NAME,
+  BANK_ACCOUNT_NUMBER,
+  BANK_IBAN,
+  WHATSAPP_NUMBER,
+  PRODUCT_NAME,
+} from '@/lib/payment-config'
 
 const BUNDLE_PRICE_PKR = 15_000
 const CREDITS_PER_BUNDLE = 5
@@ -78,8 +86,27 @@ function Field({
   )
 }
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  function copy() {
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  return (
+    <button type="button" onClick={copy} className="text-xs text-[#1A6B4A] hover:underline font-medium shrink-0">
+      {copied ? 'Copied!' : 'Copy'}
+    </button>
+  )
+}
+
 function PaymentScreen({ email, submissionId }: { email: string; submissionId: string }) {
   const ref = submissionId.split('-')[0].toUpperCase()
+  const waMessage = encodeURIComponent(
+    `Hi, I've sent PKR ${BUNDLE_PRICE_PKR.toLocaleString()} for a ${PRODUCT_NAME} featured job listing bundle. Reference: ${ref}. Contact email: ${email}`
+  )
+  const waUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${waMessage}`
+
   return (
     <div className="max-w-xl mx-auto px-4 py-12">
       <div className="text-center mb-8">
@@ -94,44 +121,89 @@ function PaymentScreen({ email, submissionId }: { email: string; submissionId: s
         </p>
       </div>
 
+      {/* Bundle summary */}
       <div className="bg-white rounded-xl border border-[#D1D9E0] p-6 mb-5">
-        <h2 className="text-sm font-semibold text-[#111827] mb-4">Payment instructions</h2>
-        <div className="space-y-3 text-sm text-[#374151]">
-          <p>
-            We&apos;ll send an invoice and bank transfer details to{' '}
-            <span className="font-medium text-[#111827]">{email}</span>{' '}
-            within 24 hours.
+        <h2 className="text-sm font-semibold text-[#111827] mb-4">Your order</h2>
+        <div className="bg-[#F8FAFC] rounded-lg border border-[#E5E7EB] p-4">
+          <p className="text-xs font-semibold text-[#6B7A8D] uppercase tracking-wide mb-3">
+            Featured bundle
           </p>
-          <div className="bg-[#F8FAFC] rounded-lg border border-[#E5E7EB] p-4">
-            <p className="text-xs font-semibold text-[#6B7A8D] uppercase tracking-wide mb-3">
-              Featured bundle
-            </p>
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-[#6B7A8D]">
-                {CREDITS_PER_BUNDLE} featured job postings · 30 days each
-              </span>
-              <span className="font-bold text-[#111827] text-base">
-                PKR {BUNDLE_PRICE_PKR.toLocaleString()}
-              </span>
-            </div>
-            <p className="text-xs text-[#9BAFC4]">
-              PKR {PRICE_PER_POST_PKR.toLocaleString()} per posting effective rate
-            </p>
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-sm text-[#6B7A8D]">
+              {CREDITS_PER_BUNDLE} featured job postings · 30 days each
+            </span>
+            <span className="font-bold text-[#111827] text-base">
+              PKR {BUNDLE_PRICE_PKR.toLocaleString()}
+            </span>
           </div>
           <p className="text-xs text-[#9BAFC4]">
-            Payment via bank transfer (HBL / UBL / Meezan). JazzCash and card support coming soon.
+            PKR {PRICE_PER_POST_PKR.toLocaleString()} per posting effective rate
           </p>
         </div>
       </div>
 
+      {/* Bank transfer details */}
+      <div className="bg-white rounded-xl border border-[#D1D9E0] p-6 mb-5">
+        <h2 className="text-sm font-semibold text-[#111827] mb-4">Payment — bank transfer</h2>
+        <div className="space-y-2.5 text-sm mb-4">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[#6B7A8D] shrink-0 w-28">Amount</span>
+            <span className="font-bold text-[#111827]">PKR {BUNDLE_PRICE_PKR.toLocaleString()}</span>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[#6B7A8D] shrink-0 w-28">Bank</span>
+            <span className="font-medium text-[#111827]">{BANK_NAME}</span>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[#6B7A8D] shrink-0 w-28">Account name</span>
+            <span className="font-medium text-[#111827]">{BANK_ACCOUNT_NAME}</span>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[#6B7A8D] shrink-0 w-28">Account no.</span>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-mono font-medium text-[#111827] break-all">{BANK_ACCOUNT_NUMBER}</span>
+              <CopyButton text={BANK_ACCOUNT_NUMBER} />
+            </div>
+          </div>
+          {BANK_IBAN && (
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[#6B7A8D] shrink-0 w-28">IBAN</span>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-mono font-medium text-[#111827] break-all text-xs">{BANK_IBAN}</span>
+                <CopyButton text={BANK_IBAN} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-[#F3F5F7] pt-4">
+          <p className="text-sm text-[#374151] mb-3">
+            After transferring, send us your payment screenshot on WhatsApp — your reference <span className="font-mono font-medium">{ref}</span> and email are pre-filled.
+          </p>
+          <a
+            href={waUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 bg-[#25D366] text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-[#1ebe5d] transition-colors"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+              <path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.122 1.528 5.855L.057 23.215a.75.75 0 0 0 .916.978l5.546-1.455A11.934 11.934 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.716 9.716 0 0 1-4.953-1.354l-.355-.21-3.676.965.984-3.595-.23-.37A9.718 9.718 0 0 1 2.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z"/>
+            </svg>
+            Send payment screenshot on WhatsApp
+          </a>
+        </div>
+      </div>
+
+      {/* What happens next */}
       <div className="bg-white rounded-xl border border-[#D1D9E0] p-6 mb-5">
         <h2 className="text-sm font-semibold text-[#111827] mb-4">What happens next</h2>
         <ol className="space-y-3">
           {[
-            "We'll email you payment instructions within 24 hours",
-            'Once payment is confirmed, your listing goes up for review (usually same day)',
-            'Your listing is published with Featured placement — pinned to the top of the board for 30 days',
-            `Submit up to ${CREDITS_PER_BUNDLE - 1} more listings using the same email address to use your remaining credits`,
+            'Transfer PKR ' + BUNDLE_PRICE_PKR.toLocaleString() + ' using the bank details above',
+            'Send us your payment screenshot on WhatsApp (button above)',
+            'We confirm payment and publish your listing with Featured placement — pinned to the top of the board for 30 days',
+            `Submit up to ${CREDITS_PER_BUNDLE - 1} more listings using the same email address (${email}) to draw from your remaining bundle credits`,
           ].map((step, i) => (
             <li key={i} className="flex gap-3 text-sm text-[#374151]">
               <span className="w-5 h-5 rounded-full bg-[#F0FAF5] border border-[#B6DFD0] text-[#1A6B4A] text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
@@ -146,8 +218,8 @@ function PaymentScreen({ email, submissionId }: { email: string; submissionId: s
       <div className="bg-[#FFFBEB] rounded-xl border border-[#FDE68A] p-4 text-sm text-[#92400E]">
         <p className="font-semibold mb-0.5">Your featured bundle includes {CREDITS_PER_BUNDLE} listings</p>
         <p className="text-xs">
-          Use the same contact email ({email}) when submitting additional listings to draw from your bundle credits.
           Each listing gets its own 30-day featured window from the date of approval.
+          Use the same contact email when submitting additional listings.
         </p>
       </div>
     </div>

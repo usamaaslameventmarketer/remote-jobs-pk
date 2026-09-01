@@ -210,3 +210,35 @@ create table if not exists job_alerts (
 -- Service role bypasses RLS; disable RLS so anon/public reads aren't needed
 alter table job_alerts disable row level security;
 -- ============================================================
+
+-- ============================================================
+-- SUBSCRIPTION MANAGEMENT (run once)
+-- ============================================================
+
+-- Add subscription fields to profiles
+alter table profiles
+  add column if not exists email              text,
+  add column if not exists subscription_status text not null default 'free',
+  add column if not exists subscription_expiry date;
+
+-- Disable RLS on profiles (consistent with other tables; admin reads all rows client-side)
+alter table profiles disable row level security;
+
+-- Update trigger to also store the user's email (needed for admin search by email)
+create or replace function handle_new_user()
+returns trigger language plpgsql security definer as $$
+begin
+  insert into profiles (id, email)
+  values (new.id, new.email)
+  on conflict (id) do update set email = excluded.email;
+  return new;
+end;
+$$;
+
+-- Backfill email for any existing profile rows (run once)
+-- This joins auth.users which is only accessible as service role in Supabase SQL editor
+update profiles p
+set email = u.email
+from auth.users u
+where p.id = u.id and p.email is null;
+-- ============================================================

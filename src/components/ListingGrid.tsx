@@ -234,10 +234,15 @@ export function ListingGrid({ listings }: { listings: ListingRow[] }) {
       setIsLoggedIn(true)
       const { data: profile } = await supabase
         .from('profiles')
-        .select('is_pro')
+        .select('is_pro, subscription_status, subscription_expiry')
         .eq('id', session.user.id)
         .single()
-      setIsPro(profile?.is_pro ?? false)
+      const today = new Date().toISOString().split('T')[0]
+      const activeSub =
+        profile?.subscription_status === 'paid' &&
+        !!profile?.subscription_expiry &&
+        profile.subscription_expiry >= today
+      setIsPro(profile?.is_pro === true || activeSub)
     }
     checkAccess()
   }, [])
