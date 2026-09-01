@@ -307,7 +307,7 @@ export default function AdminPage() {
         location_type: 'remote',
         region_eligibility: sub.region_eligibility,
         category: sub.category,
-        tags: null,
+        tags: [],
         salary_range: sub.salary_range,
         short_summary: sub.description.slice(0, 500),
         original_url: sub.application_url,
