@@ -2,14 +2,14 @@
 // Replace these placeholders with your real bank details and WhatsApp number.
 // This file is imported by the pricing page and the post-a-job page.
 
-export const BANK_ACCOUNT_NAME   = 'YOUR FULL NAME'
+export const BANK_ACCOUNT_NAME   = 'Muhammad Usama'
 export const BANK_NAME           = 'HBL'               // e.g. HBL, UBL, Meezan
-export const BANK_ACCOUNT_NUMBER = 'XXXX-XXXX-XXXX-XXXX'
-export const BANK_IBAN           = 'PKXXHBXXXXXXXXXXXXXXXX'  // optional — remove line if not using
+export const BANK_ACCOUNT_NUMBER = '23087901776303'
+export const BANK_IBAN           = 'PK97HABB0023087901776303'  // optional — remove line if not using
 
 // WhatsApp number in international format WITHOUT the + sign
-// e.g. Pakistani number: 923001234567 (country code 92, then the 10-digit number)
-export const WHATSAPP_NUMBER = '923XXXXXXXXX'
+// e.g. Pakistani number: 923360003866 (country code 92, then the 10-digit number)
+export const WHATSAPP_NUMBER = '923360003866'
 
-export const PRODUCT_NAME = 'Remote Jobs PK'
+export const PRODUCT_NAME = 'Earn Remotely'
 // ─────────────────────────────────────────────────────────────────────────────
