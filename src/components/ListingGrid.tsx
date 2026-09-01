@@ -106,7 +106,21 @@ function JobCard({ listing }: { listing: ListingRow }) {
 
   return (
     <Link href={`/listings/${listing.id}`}>
-      <article className={`bg-white rounded-xl border p-4 sm:p-5 hover:shadow-sm transition-all cursor-pointer group ${isFeaturedActive ? 'border-[#FDE68A] hover:border-[#F59E0B]' : 'border-[#D1D9E0] hover:border-[#9BAFC4]'}`}>
+      <article className={`rounded-xl border p-4 sm:p-5 transition-all cursor-pointer group ${
+        isFeaturedActive
+          ? 'bg-amber-50 border border-l-4 border-amber-200 border-l-amber-400 hover:shadow-md hover:border-amber-300 hover:border-l-amber-500'
+          : 'bg-white border-[#D1D9E0] hover:border-[#9BAFC4] hover:shadow-sm'
+      }`}>
+        {/* Featured header row — visually anchors the card before any other content */}
+        {isFeaturedActive && (
+          <div className="flex items-center gap-1.5 mb-3">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="#D97706" aria-hidden="true">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+            </svg>
+            <span className="text-xs font-bold text-amber-700 uppercase tracking-widest">Featured</span>
+          </div>
+        )}
+
         <div className="flex gap-4">
           <CompanyLogo name={company?.name ?? '?'} logoUrl={company?.logo_url} size={48} />
           <div className="flex-1 min-w-0">
@@ -121,7 +135,6 @@ function JobCard({ listing }: { listing: ListingRow }) {
                 </h2>
               </div>
               <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                {isFeaturedActive && <FeaturedBadge />}
                 {listing.source === 'employer_submitted' && <DirectFromEmployerBadge />}
                 {isWorldwide && <HiresFromPakistanBadge />}
                 {listing.verified && <VerifiedBadge />}
