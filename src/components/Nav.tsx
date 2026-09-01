@@ -118,9 +118,12 @@ export function Nav() {
             </Link>
           )}
 
-          <span className="text-sm bg-[#1A6B4A] text-white px-4 py-1.5 rounded-lg font-medium cursor-default select-none">
+          <Link
+            href="/post-a-job"
+            className="text-sm bg-[#1A6B4A] text-white px-4 py-1.5 rounded-lg font-medium hover:bg-[#155a3d] transition-colors"
+          >
             Post a Job
-          </span>
+          </Link>
         </div>
       </div>
     </nav>

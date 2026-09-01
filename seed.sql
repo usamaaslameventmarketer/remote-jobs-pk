@@ -126,3 +126,51 @@ SELECT * FROM (VALUES
 ) AS v(title, seniority, location_type, region_eligibility, tags, salary_range, short_summary, original_url, date_posted, date_added, verified, is_active, company_id);
 
 SELECT COUNT(*) AS listings_inserted FROM listings;
+
+-- ============================================================
+-- POST A JOB SCHEMA (run once — required for employer submissions)
+-- ============================================================
+
+-- Track whether a listing came from automated ingestion or an employer submission
+alter table listings
+  add column if not exists source text not null default 'ingested';
+
+-- Employer job submissions (held for payment + review before going live)
+create table if not exists submissions (
+  id                 uuid        primary key default gen_random_uuid(),
+  company_name       text        not null,
+  company_website    text        not null,
+  company_logo_url   text,
+  title              text        not null,
+  category           text        not null,
+  seniority          text        not null,
+  region_eligibility text        not null,
+  description        text        not null,
+  application_url    text        not null,
+  salary_range       text,
+  contact_email      text        not null,
+  payment_status     text        not null default 'pending',  -- pending | confirmed
+  approval_status    text        not null default 'pending',  -- pending | approved | rejected
+  listing_id         uuid        references listings(id),
+  submitted_at       timestamptz not null default now(),
+  reviewed_at        timestamptz,
+  admin_notes        text
+);
+
+alter table submissions enable row level security;
+
+-- Anyone (including unauthenticated visitors) can submit a listing
+drop policy if exists "Public can insert submissions" on submissions;
+create policy "Public can insert submissions" on submissions
+  for insert with check (true);
+
+-- Only the admin account can read submissions
+drop policy if exists "Admin can read submissions" on submissions;
+create policy "Admin can read submissions" on submissions
+  for select using ((auth.jwt() ->> 'email') = 'usama.aslam975@gmail.com');
+
+-- Only the admin account can update submissions (confirm payment, approve, reject)
+drop policy if exists "Admin can update submissions" on submissions;
+create policy "Admin can update submissions" on submissions
+  for update using ((auth.jwt() ->> 'email') = 'usama.aslam975@gmail.com');
+-- ============================================================

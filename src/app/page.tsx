@@ -30,6 +30,7 @@ async function getListings({
       short_summary,
       date_added,
       verified,
+      source,
       companies (
         id,
         name,

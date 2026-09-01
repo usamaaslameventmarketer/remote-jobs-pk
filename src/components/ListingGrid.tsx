@@ -26,6 +26,7 @@ export type ListingRow = {
   short_summary: string | null
   date_added: string
   verified: boolean
+  source: string
   companies: CompanyRow | CompanyRow[] | null
 }
 
@@ -37,6 +38,18 @@ function VerifiedBadge() {
         <polyline points="9 12 11 14 15 10" />
       </svg>
       Verified
+    </span>
+  )
+}
+
+function DirectFromEmployerBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#EEF2FF] text-[#3B4FBB] border border-[#C7D2FE] text-xs font-semibold">
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+        <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
+      </svg>
+      Direct from Employer
     </span>
   )
 }
@@ -93,6 +106,7 @@ function JobCard({ listing }: { listing: ListingRow }) {
                 </h2>
               </div>
               <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                {listing.source === 'employer_submitted' && <DirectFromEmployerBadge />}
                 {isWorldwide && <HiresFromPakistanBadge />}
                 {listing.verified && <VerifiedBadge />}
                 {listing.salary_range && (
