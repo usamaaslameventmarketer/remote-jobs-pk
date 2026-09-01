@@ -460,6 +460,7 @@ export default function AdminPage() {
   const [subSearchLoading, setSubSearchLoading] = useState(false)
   const [subActionLoading, setSubActionLoading] = useState<string | null>(null)
   const [activeSubscribers, setActiveSubscribers] = useState<ProfileRow[]>([])
+  const [recentlyExpired, setRecentlyExpired] = useState<ProfileRow[]>([])
   const [subError, setSubError] = useState('')
 
   useEffect(() => {
@@ -602,14 +603,28 @@ export default function AdminPage() {
 
   async function loadActiveSubscribers() {
     const today = new Date().toISOString().split('T')[0]
-    const { data, error: err } = await supabase
-      .from('profiles')
-      .select('id, email, is_pro, subscription_status, subscription_expiry, created_at')
-      .eq('subscription_status', 'paid')
-      .gte('subscription_expiry', today)
-      .order('subscription_expiry', { ascending: true })
-    if (err) { setSubError(err.message); return }
-    setActiveSubscribers((data as ProfileRow[]) ?? [])
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
+    const [{ data: active, error: err1 }, { data: expired, error: err2 }] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, email, is_pro, subscription_status, subscription_expiry, created_at')
+        .eq('subscription_status', 'paid')
+        .gte('subscription_expiry', today)
+        .order('subscription_expiry', { ascending: true }),
+      supabase
+        .from('profiles')
+        .select('id, email, is_pro, subscription_status, subscription_expiry, created_at')
+        .eq('subscription_status', 'paid')
+        .lt('subscription_expiry', today)
+        .gte('subscription_expiry', sevenDaysAgo)
+        .order('subscription_expiry', { ascending: false }),
+    ])
+
+    if (err1) { setSubError(err1.message); return }
+    if (err2) { setSubError(err2.message); return }
+    setActiveSubscribers((active as ProfileRow[]) ?? [])
+    setRecentlyExpired((expired as ProfileRow[]) ?? [])
   }
 
   async function searchSubscriber() {
@@ -973,6 +988,48 @@ export default function AdminPage() {
             </table>
           )}
         </div>
+
+        {/* Recently expired — follow-up candidates */}
+        {recentlyExpired.length > 0 && (
+          <div className="bg-white rounded-xl border border-amber-200 overflow-hidden mt-4">
+            <div className="px-5 py-4 border-b border-amber-100 bg-amber-50">
+              <p className="text-xs font-semibold text-amber-700 uppercase tracking-widest">
+                Expired in last 7 days ({recentlyExpired.length}) — follow up for renewal
+              </p>
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#F3F5F7]">
+                  <th className="text-left px-5 py-2.5 text-xs font-semibold text-[#6B7A8D]">Email</th>
+                  <th className="text-left px-5 py-2.5 text-xs font-semibold text-[#6B7A8D]">Expired</th>
+                  <th className="px-5 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentlyExpired.map((p) => (
+                  <tr key={p.id} className="border-b border-[#F3F5F7] last:border-0 hover:bg-[#F8FAFC]">
+                    <td className="px-5 py-3 text-[#111827] font-medium">{p.email ?? '—'}</td>
+                    <td className="px-5 py-3 text-amber-600 font-medium">
+                      {p.subscription_expiry
+                        ? new Date(p.subscription_expiry).toLocaleDateString('en-PK', { day: 'numeric', month: 'short', year: 'numeric' })
+                        : '—'}
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <button
+                        type="button"
+                        disabled={subActionLoading === p.id + ':extend'}
+                        onClick={() => handleExtendSub(p)}
+                        className="text-xs px-3 py-1 rounded-lg border border-amber-200 text-amber-700 font-medium hover:bg-amber-50 transition-colors disabled:opacity-50"
+                      >
+                        {subActionLoading === p.id + ':extend' ? '…' : 'Renew +30d'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )
