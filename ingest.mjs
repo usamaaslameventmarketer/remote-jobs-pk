@@ -545,7 +545,10 @@ async function fetchGreenhouse() {
   }
 
   // Process in batches to avoid holding all full-description HTML in memory simultaneously
-  const GH_BATCH = 8
+  const GH_BATCH = 4
+  const heartbeat = setInterval(() => {
+    process.stdout.write(`  [heartbeat] ${done}/${GREENHOUSE_SLUGS.length} Greenhouse boards done so far...\n`)
+  }, 30000)
   for (let b = 0; b < GREENHOUSE_SLUGS.length; b += GH_BATCH) {
     await Promise.allSettled(
       GREENHOUSE_SLUGS.slice(b, b + GH_BATCH).map(async (slug) => {
@@ -592,6 +595,7 @@ async function fetchGreenhouse() {
       })
     )
   }
+  clearInterval(heartbeat)
 
   console.log(`[Greenhouse] Done — ${jobs.length} raw jobs total`)
   return jobs
