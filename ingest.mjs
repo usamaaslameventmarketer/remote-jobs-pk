@@ -327,34 +327,37 @@ function classifyCategory(title, tags = [], apiCategory = '') {
   const t = title
   const cat = apiCategory
 
-  // ── Hard blocklist — checked FIRST, before any include patterns ───────────
-  if (/customer\s+(service|support|success)|support\s+specialist|help\s+desk|\bux\s+designer\b|\bui\s+designer\b|graphic\s+designer|product\s+(manager|designer|owner|lead)|visual\s+designer|operations\s+manager|project\s+manager|program\s+manager|\bscrum\b|agile\s+coach|technical\s+writer|community\s+manager|social\s+media\s+manager|content\s+creator|data\s+entry|transcri|virtual\s+assistant|supply\s+chain|logistics|procurement|purchasing|copywriter|creative\s+director|store\s+manager|retail|barber|cleaner|cleaning|maintenance\s+(tech|planner|worker)|room\s+attendant|bell\s+(person|hop)|lifeguard|painter\b|sandblaster|infanteer|surveyor|estimator|porter\b|coffee\s+roaster|merchandis|loss\s+prevention|facilities\s+planner|operator\s+sewing|sub\s+agent|general\s+manager|cabin\s+clean/i.test(t)) return 'exclude'
+  // ── Pre-blocklist overrides — Revenue/GTM Ops are Sales, not generic Ops ──
+  if (/revenue\s+operations|\brevops\b|gtm\s+operations|\bgtm\s+ops\b/i.test(t)) return 'Sales'
 
-  // ── Software Development / Engineering ──────────────────────────────────
-  if (/\b(software\s+engineer|software\s+developer|software\s+architect|web\s+developer|backend\s+engineer|frontend\s+engineer|front.?end\s+engineer|full.?stack\s+engineer|full.?stack\s+developer|mobile\s+engineer|mobile\s+developer|ios\s+engineer|android\s+engineer|devops\s+engineer|\bsre\b|site\s+reliability\s+engineer|platform\s+engineer|data\s+engineer|ml\s+engineer|machine\s+learning\s+engineer|ai\s+engineer|security\s+engineer|network\s+engineer|solutions\s+architect|cloud\s+engineer|cloud\s+architect|firmware\s+engineer|embedded\s+engineer|blockchain\s+developer|data\s+scientist|programmer|developer|qa\s+engineer|quality\s+engineer|database\s+admin|\bdba\b|\bdevops\b|\bsysadmin\b)\b/i.test(t)) return 'Software Development'
+  // ── Hard blocklist — checked before include patterns ──────────────────────
+  if (/customer\s+(service|support|success)|support\s+specialist|help\s+desk|\bux\s+designer\b|\bui\s+designer\b|graphic\s+designer|product\s+(manager|designer|owner|lead)|visual\s+designer|operations\s+manager|project\s+manager|program\s+manager|\bscrum\b|agile\s+coach|technical\s+writer|community\s+manager|social\s+media\s+manager|content\s+creator|data\s+entry|transcri|virtual\s+assistant|supply\s+chain|logistics|procurement|purchasing|copywriter|creative\s+director|store\s+manager|retail|barber|cleaner|cleaning|maintenance\s+(tech|planner|worker)|room\s+attendant|bell\s+(person|hop)|lifeguard|painter\b|sandblaster|infanteer|surveyor|estimator|porter\b|coffee\s+roaster|merchandis|loss\s+prevention|facilities\s+planner|operator\s+sewing|sub\s+agent|general\s+manager|cabin\s+clean|\bbusiness\s+analyst\b|\bdata\s+analyst\b|\bdata\s+label(er|ing)\b|annotation\s+specialist|\bai\s+trainer\b|model\s+eval(uator)?|travel\s+consultant|\bfleet\s+|\btechnical\s+evangelist\b|\bdeveloper\s+evangelist\b/i.test(t)) return 'exclude'
+
+  // ── Software Development / Engineering ───────────────────────────────────
+  if (/\b(software\s+engineer|software\s+developer|software\s+architect|web\s+developer|backend\s+engineer|frontend\s+engineer|front.?end\s+engineer|full.?stack\s+engineer|full.?stack\s+developer|mobile\s+engineer|mobile\s+developer|ios\s+engineer|android\s+engineer|devops\s+engineer|\bsre\b|site\s+reliability\s+engineer|platform\s+engineer|data\s+engineer|ml\s+engineer|machine\s+learning\s+engineer|ai\s+engineer|security\s+engineer|network\s+engineer|solutions\s+architect|solutions\s+engineer|cloud\s+engineer|cloud\s+architect|firmware\s+engineer|embedded\s+engineer|blockchain\s+developer|data\s+scientist|programmer|developer|qa\s+engineer|quality\s+engineer|database\s+admin|\bdba\b|\bdevops\b|\bsysadmin\b|principal\s+engineer|staff\s+engineer|engineering\s+manager|infrastructure\s+engineer|implementation\s+engineer)\b/i.test(t)) return 'Software Development'
   if (/\bsoftware.?dev(elopment)?\b|\bdevops\b|\bsysadmin\b|\bdata\s+science\b|\bmachine\s+learning\b/i.test(cat)) return 'Software Development'
 
-  // ── Sales ────────────────────────────────────────────────────────────────
-  if (/\bsales\b|account\s+executive|account\s+manager|business\s+development|\bbdr\b|\bsdr\b|\badr\b|revenue\s+operations|\brevops\b|sales\s+engineer|inside\s+sales/i.test(t)) return 'Sales'
+  // ── Sales ─────────────────────────────────────────────────────────────────
+  if (/\bsales\b|account\s+executive|account\s+manager|business\s+development|\bbdr\b|\bsdr\b|\badr\b|sales\s+engineer|inside\s+sales/i.test(t)) return 'Sales'
   if (/\bsales\b/i.test(cat) && !/engineer|software|developer/i.test(t)) return 'Sales'
 
-  // ── Marketing ────────────────────────────────────────────────────────────
-  if (/\bmarketing\b|\bseo\b|content\s+market|email\s+market|digital\s+market|growth\s+market|brand\s+manager|demand\s+gen(eration)?|performance\s+market|paid\s+(media|social|search|ads)|affiliate\s+market/i.test(t)) return 'Marketing'
+  // ── Marketing ─────────────────────────────────────────────────────────────
+  if (/\bmarketing\b|\bseo\b|content\s+market|email\s+market|digital\s+market|growth\s+market|brand\s+manager|demand\s+gen(eration)?|performance\s+market|paid\s+(media|social|search|ads)|affiliate\s+market|\bgrowth\s+manager\b|\bhead\s+of\s+growth\b|\bgrowth\s+lead\b/i.test(t)) return 'Marketing'
   if (/\bmarketing\b/i.test(cat) && /\bmarketing\b/i.test(t)) return 'Marketing'
 
-  // ── HR / Human Resources ─────────────────────────────────────────────────
-  if (/human\s+resources|\bhr\b|recruiter|recruiting|talent\s+acquisition|people\s+ops|people\s+operations|hr\s+manager|hr\s+director|workforce\s+planning|\bhrbp\b|compensation\s+&\s+benefits|employee\s+relations/i.test(t)) return 'HR'
+  // ── HR / Human Resources ──────────────────────────────────────────────────
+  if (/human\s+resources|\bhr\b|recruiter|recruiting|talent\s+acquisition|people\s+ops|people\s+operations|hr\s+manager|hr\s+director|workforce\s+planning|\bhrbp\b|compensation\s+(&\s+benefits|analyst|manager|specialist|director)|employee\s+relations|talent\s+partner/i.test(t)) return 'HR'
   if (/\bhuman\s+resources\b|\brecruiter\b|\btalent\s+acquisition\b/i.test(cat)) return 'HR'
 
-  // ── Legal ────────────────────────────────────────────────────────────────
-  if (/\blegal\b|\bcounsel\b|compliance\s+officer|paralegal|\battorney\b|\blawyer\b|contract\s+manager|general\s+counsel|in.?house\s+counsel|gdpr|privacy\s+counsel|legal\s+ops/i.test(t)) return 'Legal'
+  // ── Legal ─────────────────────────────────────────────────────────────────
+  if (/\blegal\b|\bcounsel\b|compliance\s+(officer|manager|analyst|specialist|director|lead)|paralegal|\battorney\b|\blawyer\b|contract\s+manager|general\s+counsel|in.?house\s+counsel|gdpr|privacy\s+counsel|legal\s+ops/i.test(t)) return 'Legal'
   if (/\blegal\b/i.test(cat) && /\blegal\b|\bcounsel\b|\bcompliance\b|\bparalegal\b|\battorney\b/i.test(t)) return 'Legal'
 
-  // ── Finance ──────────────────────────────────────────────────────────────
+  // ── Finance ───────────────────────────────────────────────────────────────
   if (/\bfinance\b|\bfinancial\b|accountant|accounting|\bcfo\b|\bcontroller\b|\bfp&a\b|\bfpa\b|bookkeeper|payroll|treasury|tax\s+specialist|financial\s+analyst|revenue\s+analyst|financial\s+controller|\baudit\b|financial\s+reporting/i.test(t)) return 'Finance'
   if (/\bfinance\b|\baccounting\b/i.test(cat) && /\bfinance\b|\bfinancial\b|\baccountant\b|\baccounting\b|\bpayroll\b|\baudit\b/i.test(t)) return 'Finance'
 
-  // ── Secondary exclude by api_category (if clearly out of scope) ──────────
+  // ── Secondary exclude by api_category (if clearly out of scope) ───────────
   if (/customer.?service|support|design|product\s+management|content\s+writing|writing/i.test(cat) && !/marketing|finance|legal|hr|sales|software|engineering/i.test(cat)) return 'exclude'
 
   return 'borderline'
@@ -541,11 +544,14 @@ async function fetchGreenhouse() {
     lithic: 'Lithic', upwork: 'Upwork', liveperson: 'LivePerson', storyblok: 'Storyblok',
   }
 
-  await Promise.allSettled(
-    GREENHOUSE_SLUGS.map(async (slug) => {
-      try {
-        const res = await fetch(
-          `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs?content=true`,
+  // Process in batches to avoid holding all full-description HTML in memory simultaneously
+  const GH_BATCH = 8
+  for (let b = 0; b < GREENHOUSE_SLUGS.length; b += GH_BATCH) {
+    await Promise.allSettled(
+      GREENHOUSE_SLUGS.slice(b, b + GH_BATCH).map(async (slug) => {
+        try {
+          const res = await fetch(
+            `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs?content=true`,
           { headers: { 'User-Agent': 'RemoteJobsPK/1.0' }, signal: AbortSignal.timeout(10000) }
         )
         done++
@@ -560,7 +566,7 @@ async function fetchGreenhouse() {
 
         for (const j of raw) {
           if (!j.absolute_url) continue
-          const fullDesc = stripHtml(j.content ?? '')
+          const fullDesc = stripHtml(j.content ?? '', 3000)
           jobs.push({
             _source: 'Greenhouse',
             title: j.title ?? '',
@@ -583,8 +589,9 @@ async function fetchGreenhouse() {
         const companyName = NAME_MAP[slug] ?? slug
         process.stdout.write(`  [${done}/${GREENHOUSE_SLUGS.length}] ${companyName}: error (${err.message})\n`)
       }
-    })
-  )
+      })
+    )
+  }
 
   console.log(`[Greenhouse] Done — ${jobs.length} raw jobs total`)
   return jobs
@@ -648,7 +655,7 @@ async function fetchLever() {
             j.descriptionPlain ?? '',
             ...(j.lists ?? []).map((l) => `${l.text}: ${l.content}`),
           ].join(' ')
-          const fullDesc = stripHtml(descText)
+          const fullDesc = stripHtml(descText, 3000)
 
           jobs.push({
             _source: 'Lever',
