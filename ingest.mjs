@@ -47,86 +47,64 @@ const WIPE = process.argv.includes('--wipe')
 // ---------------------------------------------------------------------------
 
 const GREENHOUSE_SLUGS = [
-  // Infrastructure / Cloud
+  // Infrastructure / Cloud (verified live)
   'stripe', 'datadog', 'mongodb', 'okta', 'canonical', 'cloudflare', 'elastic',
-  'hashicorp', 'digitalocean', 'netlify', 'vercel', 'grafana', 'sentry',
-  'confluent', 'cockroachdb', 'fastly', 'influxdata', 'newrelic',
+  'netlify', 'vercel', 'fastly', 'newrelic',
 
-  // Software / Dev tools
+  // Software / Dev tools (verified live)
   'anthropic', 'gitlab', 'coinbase', 'figma', 'twilio', 'postman', 'dropbox',
-  'airtable', 'contentful', 'sourcegraph', 'posthog', 'linear', 'algolia',
-  'loom', 'squarespace', 'shopify', 'replit', 'crowdin', 'lokalise', 'miro',
-  'webflow', 'coda', 'invision',
+  'airtable', 'contentful', 'algolia', 'squarespace', 'lokalise', 'webflow',
+  'sourcegraph91',                          // Sourcegraph (correct slug)
 
-  // Data / Analytics / ML
-  'databricks', 'airbyte', 'fivetran', 'hightouch', 'prefect', 'temporal',
+  // Data / Analytics / ML (verified live)
+  'databricks', 'fivetran', 'hightouch', 'mixpanel', 'labelbox',
 
-  // Sales / Marketing / CRM
-  'hubspot', 'zendesk', 'intercom', 'outreach', 'gong', 'salesloft', 'apollo',
-  'pipedrive', 'klaviyo', 'braze', 'amplitude',
-  'hootsuite', 'sproutsocial', 'iterable', 'activecampaign', 'drift',
-  'aircall', 'pandadoc', 'sendbird', 'helpscout', 'close',
+  // Observability / DevTools (verified live)
+  'grafanalabs', 'launchdarkly', 'honeycomb',
 
-  // HR / People Ops
-  'remote', 'deel', 'rippling', 'lattice', 'gusto', 'checkr',
-  'personio', '15five', 'cultureamp', 'hibob',
+  // Security (verified live)
+  'zscaler', 'securityscorecard', 'chainguard',
 
-  // Legal
-  'ironclad', 'clio',
+  // AI / ML platforms (verified live)
+  'scaleai', 'assemblyai', 'gleanwork',
 
-  // Finance
-  'brex', 'robinhood', 'paddle', 'xero', 'chargebee', 'plaid',
-  'nubank', 'wise', 'carta', 'pilot',
+  // Sales / Marketing / CRM (verified live)
+  'hubspot', 'intercom', 'salesloft', 'klaviyo', 'braze', 'amplitude',
+  'hootsuite', 'sproutsocial', 'iterable', 'pandadoc', 'sendbird',
+  'apollo', 'unbounce', 'zoominfo', 'cognism', 'showpad', 'zuora',
+  'gongio',                                 // Gong.io (correct slug)
+  'customerio', '6sense', 'dialpad',
 
-  // General / Other
-  'asana', 'pagerduty', '1password', 'notion', 'scale',
-  'freshworks', 'pluralsight',
+  // HR / People Ops (verified live)
+  'remote', 'lattice', 'gusto', 'checkr', 'cultureamp', 'justworks',
+  'automatticcareers',                      // Automattic/WordPress (correct slug)
 
-  // --- Expansion: Sales-heavy remote employers ---
-  'docusign', 'ringcentral', 'talkdesk', 'sprinklr', 'seismic',
-  'highspot', 'clari', 'cognism', 'zoominfo', 'chorus',
-  'mindtickle', 'showpad', 'mediafly', 'qatalog', 'memrise',
+  // Collaboration / Productivity (verified live)
+  'realtimeboardglobal',                    // Miro (correct slug)
+  'smartsheet', 'samsara', 'tripactions',
 
-  // --- Expansion: Marketing-focused remote employers ---
-  'semrush', 'moz', 'omnisend', 'sendgrid', 'postmarkapp',
-  'campaignmonitor', 'drip', 'mailerlite', 'moosend',
-  'unbounce', 'hotjar', 'crazy-egg', 'contentsquare', 'userleap',
+  // Finance / FinTech (verified live)
+  'brex', 'robinhood', 'nubank', 'wise', 'carta',
+  'mercury', 'gocardless', 'tipaltisolutions', 'lithic',
 
-  // --- Expansion: Finance / FinTech remote employers ---
-  'expensify', 'bill', 'tipalti', 'coupa', 'zuora',
-  'recurly', 'avalara', 'taxjar', 'ramp', 'airbase',
-  'spendesk', 'pleo', 'payhawk', 'soldo', 'mesh-payments',
-  'netsuite', 'floqast', 'workiva', 'vena',
+  // Legal (verified live)
+  'mycase',
 
-  // --- Expansion: HR / People Ops remote employers ---
-  'bamboohr', 'justworks', 'zenefits', 'leapsome', 'namely',
-  'peoplehum', 'springworks', 'keka', 'darwinbox', 'oysterhr',
-  'remote-com', 'multiplier', 'velocity-global', 'globalization-partners', 'papaya-global',
+  // Freelance / Marketplace (verified live)
+  'upwork',
 
-  // --- Expansion: Legal remote employers ---
-  'evisort', 'contractbook', 'spotdraft', 'linksquares', 'legalone',
-  'lexion', 'mycase', 'smokeball',
+  // General / Other (verified live)
+  'asana', 'pagerduty',
+  'liveperson', 'storyblok',
 ]
 
 const LEVER_SLUGS = [
-  'toptal', 'canonical', 'zapier', 'buffer', 'doist', 'automattic',
-  'hotjar', 'pitch', 'typeform', 'whereby', 'convertkit',
-  'deel', 'remote', 'oyster', 'loom',
-  // Existing additions
-  'duckduckgo', 'wikimedia', 'close', 'helpscout', 'percona',
-  'invision', 'dbt-labs', 'turing',
-  // Expansion: Sales / Marketing remote employers
-  'talkdesk', 'sprinklr', 'seismic', 'highspot', 'clari',
-  'semrush', 'mailchimp', 'sendgrid', 'omnisend', 'drip',
-  'unbounce', 'hootsuite',
-  // Expansion: Finance remote employers
-  'expensify', 'tipalti', 'recurly', 'ramp', 'spendesk',
-  'pleo', 'vena',
-  // Expansion: HR remote employers
-  'bamboohr', 'leapsome', 'namely', 'greenhouse', 'lever',
-  'oysterhr', 'multiplier',
-  // Expansion: Legal remote employers
-  'contractbook', 'spotdraft', 'evisort', 'lexion',
+  // Verified live
+  'toptal', 'omnisend', 'whereby',
+  'pipedrive',                              // CRM — 16 jobs
+  'sonatype',                               // Software supply chain security — 34 jobs
+  // Live but 0 jobs — keep in case they post
+  'highspot', 'clari',
 ]
 
 // ---------------------------------------------------------------------------
@@ -287,6 +265,59 @@ function hasTimezoneRestriction(description) {
 }
 
 // ---------------------------------------------------------------------------
+// Region confidence — description-level restriction scanning
+//
+// Many Greenhouse/Lever postings list "Remote" as the location (which our
+// classifyRegion() maps to "Worldwide") but bury an explicit country
+// restriction in the body text, e.g. "must be authorized to work in the US".
+// We scan the full description (before storage truncation) to catch these.
+//
+// Three confidence levels:
+//   confirmed_open        — no restriction found; description may even confirm global hiring
+//   restricted_other_region — description explicitly restricts to a region that excludes PK
+//   unclear               — specific region tag (EMEA/APAC/USA/UK), or Worldwide with no signal
+// ---------------------------------------------------------------------------
+
+// Phrases that mean the role is restricted to a non-Pakistan region
+const REGION_EXCLUSION_RE = /\b(?:US|U\.S\.|United States|USA)\s*-?\s*only\b|\bonly\s+(?:open\s+to|for|hiring)\s+(?:candidates?|applicants?|residents?|citizens?)?\s*(?:based\s+in|in|from)\s+(?:the\s+)?(?:US\b|United States|USA\b|UK\b|United Kingdom|Canada\b|Australia\b)\b|\bmust\s+(?:be\s+)?(?:based|located?|resid(?:e|ing)|living?|work(?:ing)?)\s+(?:in|within)\s+(?:the\s+)?(?:US\b|U\.S\b|United States|USA\b|UK\b|United Kingdom|Canada\b|Australia\b|Germany\b|France\b|Netherlands\b|European Union\b)\b|\bauthori[sz]ed?\s+to\s+work\s+in\s+(?:the\s+)?(?:US\b|U\.S\b|United States|USA\b|UK\b|United Kingdom)\b|\blegally\s+(?:authorized?|eligible|permitted)\s+to\s+work\s+in\b|\bwork\s+authori[sz]ation\s+(?:in|for)\s+(?:the\s+)?(?:US\b|United States|UK\b|United Kingdom)\b|\bthis\s+(?:role|position|job)\s+is\s+(?:only\s+)?(?:open|available)\s+to\s+(?:candidates?|applicants?)\s+(?:based\s+)?in\b|\bcandidates?\s+must\s+be\s+(?:based|located?|resident)\s+in\b|\b(?:US|United States|USA|Canada|UK|United Kingdom|Australia|EU|European Union)\s+(?:citizens?|residents?|nationals?)\s+only\b|\bno\s+(?:visa|work\s+visa)\s+sponsorship\b/i
+
+// Phrases that CONFIRM the role is genuinely open to anyone globally
+const REGION_OPEN_RE = /\bhire\s+(?:globally|worldwide|internationally|from\s+anywhere|from\s+any\s+country)\b|\bwork\s+from\s+anywhere\b|\bno\s+geographic\s+restrictions?\b|\bglobally\s+distributed\b|\blocation\s+(?:independent|agnostic)\b|\bopen\s+to\s+(?:all\s+countries|candidates?\s+(?:anywhere|worldwide|globally|from\s+any\s+country))\b|\bwelcome\s+candidates?\s+from\s+(?:any|all)\s+(?:country|countries|location)\b|\bhire\s+in\s+any\s+country\b|\bfully\s+distributed\s+team\b/i
+
+/**
+ * Given the region already classified from the location field and the full
+ * description text, return a confidence level and (if needed) a corrected
+ * region tag.
+ */
+function classifyRegionConfidence(region, description) {
+  const text = description ?? ''
+
+  if (REGION_EXCLUSION_RE.test(text)) {
+    // Description explicitly restricts — fix the region tag if it was over-broad
+    const correctedRegion = region === 'Worldwide' ? restrictionToRegion(text) : region
+    return { confidence: 'restricted_other_region', correctedRegion }
+  }
+
+  if (region === 'Worldwide') {
+    if (REGION_OPEN_RE.test(text)) return { confidence: 'confirmed_open', correctedRegion: region }
+    // Worldwide with no explicit signal either way
+    return { confidence: 'unclear', correctedRegion: region }
+  }
+
+  // Already a specific region (EMEA/APAC/USA/UK) — role is regionally scoped
+  return { confidence: 'unclear', correctedRegion: region }
+}
+
+/** Infer which region the exclusion refers to from the description text. */
+function restrictionToRegion(text) {
+  if (/\b(?:US|U\.S\.|United States|USA|Canada|LATAM|Latin America)\b/i.test(text)) return 'USA'
+  if (/\b(?:UK|United Kingdom|Britain|England)\b/i.test(text)) return 'UK'
+  if (/\b(?:EU|European Union|Germany|France|Netherlands|Spain|Italy|Poland)\b/i.test(text)) return 'EMEA'
+  if (/\b(?:Australia|New Zealand|ANZ)\b/i.test(text)) return 'APAC'
+  return 'USA' // safe default for unrecognized restriction
+}
+
+// ---------------------------------------------------------------------------
 // Stage 2 — Category filter (exactly 6 allowed)
 // Returns: category name | 'exclude' | 'borderline'
 // Category names: 'Software Development' | 'Sales' | 'Marketing' | 'HR' | 'Legal' | 'Finance'
@@ -382,13 +413,13 @@ Reply with ONLY one of these exact strings: "Software Development", "Sales", "Ma
 // Helpers
 // ---------------------------------------------------------------------------
 
-function stripHtml(html) {
+function stripHtml(html, maxLen = Infinity) {
   return (html ?? '')
     .replace(/<[^>]*>/g, ' ')
     .replace(/&[a-z#0-9]+;/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 500)
+    .slice(0, maxLen)
 }
 
 function deriveSeniority(title) {
@@ -496,6 +527,18 @@ async function fetchGreenhouse() {
     evisort: 'Evisort', contractbook: 'Contractbook', spotdraft: 'SpotDraft',
     linksquares: 'LinkSquares', lexion: 'Lexion',
     mycase: 'MyCase', smokeball: 'Smokeball',
+    // Corrected slugs
+    sourcegraph91: 'Sourcegraph', gongio: 'Gong', realtimeboardglobal: 'Miro',
+    automatticcareers: 'Automattic',
+    // New additions
+    mixpanel: 'Mixpanel', labelbox: 'Labelbox',
+    grafanalabs: 'Grafana Labs', launchdarkly: 'LaunchDarkly', honeycomb: 'Honeycomb.io',
+    zscaler: 'Zscaler', securityscorecard: 'SecurityScorecard', chainguard: 'Chainguard',
+    scaleai: 'Scale AI', assemblyai: 'AssemblyAI', gleanwork: 'Glean',
+    customerio: 'Customer.io', '6sense': '6sense', dialpad: 'Dialpad',
+    smartsheet: 'Smartsheet', samsara: 'Samsara', tripactions: 'Navan',
+    mercury: 'Mercury', gocardless: 'GoCardless', tipaltisolutions: 'Tipalti',
+    lithic: 'Lithic', upwork: 'Upwork', liveperson: 'LivePerson', storyblok: 'Storyblok',
   }
 
   await Promise.allSettled(
@@ -517,6 +560,7 @@ async function fetchGreenhouse() {
 
         for (const j of raw) {
           if (!j.absolute_url) continue
+          const fullDesc = stripHtml(j.content ?? '')
           jobs.push({
             _source: 'Greenhouse',
             title: j.title ?? '',
@@ -528,7 +572,8 @@ async function fetchGreenhouse() {
             api_category: j.departments?.map((d) => d.name).join(' ') ?? '',
             location: j.location?.name ?? '',
             salary_range: null,
-            short_summary: stripHtml(j.content ?? ''),
+            short_summary: fullDesc.slice(0, 500),
+            _fullDesc: fullDesc,
             date_posted: j.updated_at?.split('T')[0] ?? null,
             seniority: deriveSeniority(j.title ?? ''),
           })
@@ -575,6 +620,8 @@ async function fetchLever() {
     // Expansion: Legal
     contractbook: 'Contractbook', spotdraft: 'SpotDraft',
     evisort: 'Evisort', lexion: 'Lexion',
+    // New additions
+    pipedrive: 'Pipedrive', sonatype: 'Sonatype',
   }
 
   await Promise.allSettled(
@@ -601,6 +648,7 @@ async function fetchLever() {
             j.descriptionPlain ?? '',
             ...(j.lists ?? []).map((l) => `${l.text}: ${l.content}`),
           ].join(' ')
+          const fullDesc = stripHtml(descText)
 
           jobs.push({
             _source: 'Lever',
@@ -613,7 +661,8 @@ async function fetchLever() {
             api_category: [j.categories?.team, j.categories?.department].filter(Boolean).join(' '),
             location: locationName,
             salary_range: null,
-            short_summary: stripHtml(descText).slice(0, 500),
+            short_summary: fullDesc.slice(0, 500),
+            _fullDesc: fullDesc,
             date_posted: j.createdAt ? new Date(j.createdAt).toISOString().split('T')[0] : null,
             seniority: deriveSeniority(j.text ?? ''),
           })
@@ -725,11 +774,18 @@ async function ingest() {
       regionRejectedBySource[j._source] = (regionRejectedBySource[j._source] ?? 0) + 1
       continue
     }
-    j._region = region
-    regionTagCounts[region] = (regionTagCounts[region] ?? 0) + 1
+
+    // Scan full description for explicit region restrictions that the location
+    // field may have missed (e.g. location = "Remote" but body = "US only")
+    const { confidence, correctedRegion } = classifyRegionConfidence(region, j._fullDesc ?? j.short_summary)
+    j._region = correctedRegion
+    j._regionConfidence = confidence
+    delete j._fullDesc // no longer needed after this point
+
+    regionTagCounts[correctedRegion] = (regionTagCounts[correctedRegion] ?? 0) + 1
 
     // Timezone restriction in Worldwide listings → borderline for Claude adjudication
-    if (region === 'Worldwide' && hasTimezoneRestriction(j.short_summary)) {
+    if (correctedRegion === 'Worldwide' && hasTimezoneRestriction(j.short_summary)) {
       j._tzFlagged = true
       timezoneBorderline.push(j)
     } else {
@@ -854,6 +910,7 @@ async function ingest() {
       seniority: job.seniority,
       location_type: 'remote',
       region_eligibility: job._region,
+      region_confidence: job._regionConfidence ?? 'unclear',
       category: job._category ?? null,
       tags: job.tags,
       salary_range: job.salary_range,

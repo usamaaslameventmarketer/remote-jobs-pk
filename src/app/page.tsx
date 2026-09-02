@@ -25,6 +25,7 @@ async function getListings({
       seniority,
       location_type,
       region_eligibility,
+      region_confidence,
       category,
       tags,
       salary_range,
@@ -108,12 +109,21 @@ export default async function HomePage({
 
   const hasFilters = !!(q || seniority || region || category)
 
-  // Pin active featured listings to the top; preserve DB order (date_added desc) within each group
+  // Sort order: featured → confirmed_open → unclear → restricted_other_region
+  // Within each tier, preserve DB order (date_added desc)
   const today = new Date().toISOString().split('T')[0]
+  const CONFIDENCE_RANK: Record<string, number> = {
+    confirmed_open: 2,
+    unclear: 1,
+    restricted_other_region: 0,
+  }
   const sorted = [...filtered].sort((a, b) => {
     const aF = (a as any).featured && (a as any).featured_until >= today ? 1 : 0
     const bF = (b as any).featured && (b as any).featured_until >= today ? 1 : 0
-    return bF - aF
+    if (bF !== aF) return bF - aF
+    const aC = CONFIDENCE_RANK[(a as any).region_confidence ?? 'unclear'] ?? 1
+    const bC = CONFIDENCE_RANK[(b as any).region_confidence ?? 'unclear'] ?? 1
+    return bC - aC
   })
 
   return (

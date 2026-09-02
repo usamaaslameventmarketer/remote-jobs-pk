@@ -20,6 +20,7 @@ export type ListingRow = {
   seniority: string
   location_type: string
   region_eligibility: string
+  region_confidence: 'confirmed_open' | 'unclear' | 'restricted_other_region' | null
   category: string
   tags: string[] | null
   salary_range: string | null
@@ -80,6 +81,19 @@ function HiresFromPakistanBadge() {
   )
 }
 
+function RegionRestrictionBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-medium">
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+        <line x1="12" y1="9" x2="12" y2="13" />
+        <line x1="12" y1="17" x2="12.01" y2="17" />
+      </svg>
+      May restrict region
+    </span>
+  )
+}
+
 function SeniorityBadge({ seniority }: { seniority: string }) {
   const styles: Record<string, string> = {
     entry: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -136,7 +150,8 @@ function JobCard({ listing }: { listing: ListingRow }) {
               </div>
               <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
                 {listing.source === 'employer_submitted' && <DirectFromEmployerBadge />}
-                {isWorldwide && <HiresFromPakistanBadge />}
+                {isWorldwide && listing.region_confidence !== 'restricted_other_region' && <HiresFromPakistanBadge />}
+                {listing.region_confidence === 'restricted_other_region' && <RegionRestrictionBadge />}
                 {listing.verified && <VerifiedBadge />}
                 {listing.salary_range && (
                   <span className="text-sm font-semibold text-[#111827] whitespace-nowrap">
