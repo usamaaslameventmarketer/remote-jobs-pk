@@ -2,6 +2,8 @@
 
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
+import type React from 'react'
+import { MapPin, Briefcase, BarChart2 } from 'lucide-react'
 
 const LOCATION_OPTIONS = [
   { label: 'All Locations', value: '' },
@@ -38,6 +40,7 @@ function Dropdown({
   region,
   category,
   seniority,
+  Icon,
 }: {
   label: string
   options: { label: string; value: string }[]
@@ -47,6 +50,7 @@ function Dropdown({
   region: string
   category: string
   seniority: string
+  Icon?: React.ElementType
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -88,6 +92,7 @@ function Dropdown({
             : 'bg-white text-[#374151] border-[#D1D9E0] hover:border-[#9BAFC4] hover:text-[#111827]'
         }`}
       >
+        {Icon && <Icon size={13} aria-hidden="true" />}
         {hasSelection ? `${label}: ${selected?.label}` : label}
         <svg
           width="12"
@@ -149,6 +154,7 @@ export function FilterBar({
         region={region}
         category={category}
         seniority={seniority}
+        Icon={MapPin}
       />
       <Dropdown
         label="Department"
@@ -159,6 +165,7 @@ export function FilterBar({
         region={region}
         category={category}
         seniority={seniority}
+        Icon={Briefcase}
       />
       <Dropdown
         label="Seniority"
@@ -169,6 +176,7 @@ export function FilterBar({
         region={region}
         category={category}
         seniority={seniority}
+        Icon={BarChart2}
       />
     </div>
   )

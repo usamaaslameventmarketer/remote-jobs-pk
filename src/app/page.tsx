@@ -5,6 +5,9 @@ import { SearchBar } from '@/components/SearchBar'
 import { FilterBar } from '@/components/FilterBar'
 import { ListingGrid } from '@/components/ListingGrid'
 import { AlertSubscribe } from '@/components/AlertSubscribe'
+import { CategoryBrowse } from '@/components/CategoryBrowse'
+import { Testimonials } from '@/components/Testimonials'
+import { Search, ExternalLink, DollarSign, ShieldCheck } from 'lucide-react'
 
 export const revalidate = 60
 
@@ -95,6 +98,29 @@ function EmptyState({ hasFilters }: { hasFilters: boolean }) {
   )
 }
 
+const WHY_PROPS = [
+  {
+    Icon: Search,
+    title: 'Hand-curated listings',
+    desc: 'Every role is reviewed for quality and Pakistan eligibility.',
+  },
+  {
+    Icon: ExternalLink,
+    title: 'Direct apply links',
+    desc: "No middlemen. Apply straight to the employer's ATS.",
+  },
+  {
+    Icon: DollarSign,
+    title: 'USD income',
+    desc: 'Build a career at global companies and earn in hard currency.',
+  },
+  {
+    Icon: ShieldCheck,
+    title: 'Verified companies',
+    desc: 'We verify company legitimacy before listing their roles.',
+  },
+]
+
 export default async function HomePage({
   searchParams,
 }: {
@@ -135,26 +161,59 @@ export default async function HomePage({
 
   return (
     <>
-      {/* Search hero */}
-      <div className="bg-white border-b border-[#D1D9E0]">
-        <div className="max-w-4xl mx-auto px-4 py-10 sm:py-12 text-center">
-          <h1 className="text-2xl sm:text-3xl font-bold text-[#111827] tracking-tight mb-3">
-            Carefully curated remote jobs for Pakistani talent
+      {/* Hero section */}
+      <div style={{ background: 'linear-gradient(135deg, #0F2137 0%, #1A3050 100%)' }}>
+        <div className="max-w-4xl mx-auto px-4 py-14 text-center">
+          {/* Eyebrow badge */}
+          <div className="inline-flex items-center gap-2 bg-[#1A6B4A] text-white text-xs font-semibold px-3 py-1.5 rounded-full mb-5">
+            <span>🇵🇰</span>
+            <span>For Pakistan-based talent</span>
+          </div>
+
+          <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight mb-3 leading-tight">
+            Find Remote Work at the World&apos;s Best Companies
           </h1>
-          <p className="text-[#6B7A8D] text-sm sm:text-base leading-relaxed mb-7">
-            Earn in USD from the comfort of home.<br className="hidden sm:block" />{' '}
-            Build a career at reputable global companies.
+          <p className="text-[#8AAEC8] text-sm sm:text-base leading-relaxed mb-7">
+            Every listing manually curated. Direct application links. USD income.
           </p>
+
           <Suspense>
             <SearchBar defaultValue={q} />
           </Suspense>
+
+          {/* Stats row */}
+          <div className="mt-6 flex items-center justify-center gap-0 divide-x divide-[#1A3050]">
+            <div className="px-5 py-2 text-center">
+              <p className="text-lg font-bold text-[#1A6B4A]">{totalCount.toLocaleString()}+</p>
+              <p className="text-xs text-[#8AAEC8]">Listings</p>
+            </div>
+            <div className="px-5 py-2 text-center">
+              <p className="text-lg font-bold text-white">90+</p>
+              <p className="text-xs text-[#8AAEC8]">Top Companies</p>
+            </div>
+            <div className="px-5 py-2 text-center">
+              <p className="text-lg font-bold text-white">Every 6h</p>
+              <p className="text-xs text-[#8AAEC8]">Updated</p>
+            </div>
+          </div>
+
           <div className="mt-5 flex items-center gap-3 flex-col sm:flex-row max-w-sm mx-auto">
             <AlertSubscribe />
           </div>
         </div>
       </div>
 
-      {/* Filter + results */}
+      {/* Category browse section */}
+      <div className="bg-white py-10">
+        <div className="max-w-4xl mx-auto px-4">
+          <h2 className="text-xl font-bold text-[#111827] mb-6 flex items-center gap-2">
+            Browse by Department
+          </h2>
+          <CategoryBrowse />
+        </div>
+      </div>
+
+      {/* Filter + listings section */}
       <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8">
         <div className="mb-5">
           <FilterBar
@@ -187,6 +246,29 @@ export default async function HomePage({
             baseHref={baseHref}
           />
         )}
+      </div>
+
+      {/* Testimonials section */}
+      <Testimonials />
+
+      {/* Why section */}
+      <div className="bg-white py-14">
+        <div className="max-w-4xl mx-auto px-4">
+          <h2 className="text-2xl font-bold text-[#111827] mb-8 text-center">
+            Why Remote Jobs PK?
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {WHY_PROPS.map(({ Icon, title, desc }) => (
+              <div key={title} className="flex flex-col items-center text-center gap-3">
+                <div className="w-11 h-11 rounded-full bg-[#E8F5EF] flex items-center justify-center shrink-0">
+                  <Icon size={20} className="text-[#1A6B4A]" aria-hidden="true" />
+                </div>
+                <p className="font-semibold text-[#111827] text-sm">{title}</p>
+                <p className="text-xs text-[#6B7A8D] leading-relaxed">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </>
   )
