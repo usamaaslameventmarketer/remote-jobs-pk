@@ -44,6 +44,58 @@ function cleanText(raw: string): string {
   return text.replace(/\s+/g, ' ').trim()
 }
 
+/**
+ * Render structured plain text (from full_description) as proper JSX paragraphs
+ * and bullet lists. Text uses '\n\n' to separate blocks and '\n• ' for bullets.
+ * No dangerouslySetInnerHTML — everything is plain React elements.
+ */
+function renderDescription(text: string) {
+  const blocks = text.split(/\n\n+/).map((b) => b.trim()).filter(Boolean)
+  return (
+    <div className="space-y-3 text-[#111827] leading-relaxed text-sm sm:text-base">
+      {blocks.map((block, i) => {
+        const lines = block.split('\n').map((l) => l.trim()).filter(Boolean)
+        const bulletLines = lines.filter((l) => l.startsWith('• '))
+        const textLines = lines.filter((l) => !l.startsWith('• '))
+
+        if (bulletLines.length > 0 && textLines.length === 0) {
+          // Pure bullet list block
+          return (
+            <ul key={i} className="space-y-1 pl-0 list-none">
+              {bulletLines.map((b, j) => (
+                <li key={j} className="flex gap-2">
+                  <span className="text-[#1A6B4A] shrink-0 mt-0.5" aria-hidden="true">•</span>
+                  <span>{b.slice(2)}</span>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+
+        if (bulletLines.length > 0 && textLines.length > 0) {
+          // Section header followed by bullets
+          return (
+            <div key={i}>
+              <p className="font-medium mb-1">{textLines.join(' ')}</p>
+              <ul className="space-y-1 pl-0 list-none">
+                {bulletLines.map((b, j) => (
+                  <li key={j} className="flex gap-2">
+                    <span className="text-[#1A6B4A] shrink-0 mt-0.5" aria-hidden="true">•</span>
+                    <span>{b.slice(2)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )
+        }
+
+        // Plain paragraph
+        return <p key={i}>{lines.join(' ')}</p>
+      })}
+    </div>
+  )
+}
+
 async function getListing(id: string) {
   const { data, error } = await supabase
     .from('listings')
@@ -56,6 +108,7 @@ async function getListing(id: string) {
       tags,
       salary_range,
       short_summary,
+      full_description,
       original_url,
       date_posted,
       date_added,
@@ -257,9 +310,13 @@ export default async function ListingDetailPage({
               <h2 className="text-xs font-semibold text-[#6B7A8D] uppercase tracking-widest mb-3">
                 About this role
               </h2>
-              <p className="text-[#111827] leading-relaxed text-sm sm:text-base whitespace-pre-line">
-                {cleanText(listing.short_summary ?? '')}
-              </p>
+              {listing.full_description
+                ? renderDescription(listing.full_description)
+                : (
+                  <p className="text-[#111827] leading-relaxed text-sm sm:text-base whitespace-pre-line">
+                    {cleanText(listing.short_summary ?? '')}
+                  </p>
+                )}
             </div>
 
             {/* Skills */}

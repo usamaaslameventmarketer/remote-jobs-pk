@@ -425,6 +425,44 @@ function stripHtml(html, maxLen = Infinity) {
     .slice(0, maxLen)
 }
 
+/**
+ * Convert HTML to structured plain text, preserving paragraph breaks and
+ * bullet lists. Used to populate `full_description` in the DB.
+ *
+ * Decodes entities BEFORE stripping tags so that double-encoded HTML
+ * (e.g. Greenhouse &lt;div&gt;) is handled correctly.
+ */
+function htmlToStructuredText(html, maxLen = Infinity) {
+  let text = (html ?? '')
+    // Decode common entities first so double-encoded markup becomes real tags
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+  // Block-level elements → newlines
+  text = text
+    .replace(/<\/?(h[1-6])[^>]*>/gi, '\n\n')
+    .replace(/<p[^>]*>/gi, '\n\n')
+    .replace(/<\/p>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '\n• ')
+    .replace(/<\/li>/gi, '')
+    .replace(/<\/?(ul|ol|div|section|article|blockquote)[^>]*>/gi, '\n')
+    // Strip all remaining tags
+    .replace(/<[^>]*>/g, '')
+    // Strip remaining entities
+    .replace(/&#\d+;/g, ' ')
+    .replace(/&[a-z]+;/gi, ' ')
+    // Normalise whitespace (preserve intentional newlines)
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n +/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+  return text.slice(0, maxLen)
+}
+
 function deriveSeniority(title) {
   const t = title.toLowerCase()
   if (/senior|lead|principal|staff|\bhead of\b|\bvp\b|director/.test(t)) return 'senior'
@@ -570,6 +608,7 @@ async function fetchGreenhouse() {
         for (const j of raw) {
           if (!j.absolute_url) continue
           const fullDesc = stripHtml(j.content ?? '', 3000)
+          const fullDescStructured = htmlToStructuredText(j.content ?? '', 3000)
           jobs.push({
             _source: 'Greenhouse',
             title: j.title ?? '',
@@ -583,6 +622,7 @@ async function fetchGreenhouse() {
             salary_range: null,
             short_summary: fullDesc.slice(0, 500),
             _fullDesc: fullDesc,
+            _fullDescStructured: fullDescStructured,
             date_posted: j.updated_at?.split('T')[0] ?? null,
             seniority: deriveSeniority(j.title ?? ''),
           })
@@ -660,6 +700,11 @@ async function fetchLever() {
             ...(j.lists ?? []).map((l) => `${l.text}: ${l.content}`),
           ].join(' ')
           const fullDesc = stripHtml(descText, 3000)
+          // Lever: descriptionPlain is already plain text; lists may contain HTML bullets
+          const fullDescStructured = [
+            (j.descriptionPlain ?? '').trim(),
+            ...(j.lists ?? []).map((l) => `\n\n${l.text}\n${htmlToStructuredText(l.content ?? '')}`),
+          ].join('').trim().slice(0, 3000)
 
           jobs.push({
             _source: 'Lever',
@@ -674,6 +719,7 @@ async function fetchLever() {
             salary_range: null,
             short_summary: fullDesc.slice(0, 500),
             _fullDesc: fullDesc,
+            _fullDescStructured: fullDescStructured,
             date_posted: j.createdAt ? new Date(j.createdAt).toISOString().split('T')[0] : null,
             seniority: deriveSeniority(j.text ?? ''),
           })
@@ -936,6 +982,7 @@ async function ingest() {
       tags: job.tags,
       salary_range: job.salary_range,
       short_summary: job.short_summary || 'No description available.',
+      full_description: job._fullDescStructured || job.short_summary || null,
       original_url: job.original_url,
       date_posted: job.date_posted,
       verified: false,
