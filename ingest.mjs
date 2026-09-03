@@ -709,9 +709,19 @@ async function ingest() {
   }
 
   // ── Check existing ─────────────────────────────────────────────────────────
-  const { data: existingRows, error: existErr } = await sb.from('listings').select('original_url')
-  if (existErr) { console.error('Could not query listings:', existErr.message); process.exit(1) }
-  const existingUrls = new Set((existingRows ?? []).map((r) => r.original_url))
+  // Paginate to avoid Supabase's 1000-row default cap
+  const existingUrls = new Set()
+  {
+    let from = 0
+    while (true) {
+      const { data, error: existErr } = await sb.from('listings').select('original_url').range(from, from + 999)
+      if (existErr) { console.error('Could not query listings:', existErr.message); process.exit(1) }
+      if (!data || data.length === 0) break
+      for (const r of data) existingUrls.add(r.original_url)
+      if (data.length < 1000) break
+      from += 1000
+    }
+  }
 
   const { count: companyCount } = await sb.from('companies').select('*', { count: 'exact', head: true })
   console.log(`DB state: ${existingUrls.size} listings, ${companyCount ?? '?'} companies\n`)
