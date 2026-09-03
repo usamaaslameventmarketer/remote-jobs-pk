@@ -7,7 +7,7 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Remote Jobs PK — Curated Remote Jobs for Pakistan-based Talent',
+  title: 'Earn Remotely — Curated Remote Jobs for Pakistan-based Talent',
   description:
     'Find remote job opportunities curated for Pakistan-based graduates and professionals. Every listing manually reviewed.',
 }

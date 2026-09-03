@@ -54,8 +54,8 @@ export function Nav() {
           href="/"
           className="font-bold text-white text-[15px] tracking-tight shrink-0"
         >
-          Remote Jobs{' '}
-          <span className="text-[#4ADE80]">PK</span>
+          Earn{' '}
+          <span className="text-[#4ADE80]">Remotely</span>
         </Link>
 
         <div className="hidden md:flex items-center gap-6">

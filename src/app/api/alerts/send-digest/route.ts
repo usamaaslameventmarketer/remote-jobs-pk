@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
     const results = await Promise.allSettled(
       batch.map((sub) =>
         resend.emails.send({
-          from: 'Remote Jobs PK <alerts@remotejobs.pk>',
+          from: 'Earn Remotely <alerts@remotejobs.pk>',
           to: sub.email,
           subject: `${listings.length} new remote job${listings.length === 1 ? '' : 's'} — ${today}`,
           html: `

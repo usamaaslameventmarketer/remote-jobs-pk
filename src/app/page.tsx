@@ -220,20 +220,17 @@ export default async function HomePage({
       </div>
 
       {/* Impact stats bar */}
-      <div className="bg-[#F0F7F4] border-y border-[#C8E6D8] py-6">
-        <div className="max-w-4xl mx-auto px-4 flex flex-wrap items-center justify-center gap-10">
+      <div className="bg-[#F0F7F4] border-y border-[#C8E6D8] py-8">
+        <div className="max-w-4xl mx-auto px-4 flex flex-wrap items-center justify-center gap-12">
           {IMPACT_STATS.map(({ Icon, value, label }) => (
-            <div key={label} className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#1A6B4A] flex items-center justify-center shrink-0">
-                <Icon size={18} className="text-white" aria-hidden="true" />
+            <div key={label} className="flex flex-col items-center gap-2 text-center">
+              <div className="w-12 h-12 rounded-full bg-[#1A6B4A] flex items-center justify-center shrink-0">
+                <Icon size={20} className="text-white" aria-hidden="true" />
               </div>
-              <div>
-                <p className="text-2xl font-extrabold text-[#111827] leading-none">{value}</p>
-                <p className="text-xs text-[#4B7A62] font-medium mt-0.5">{label}</p>
-              </div>
+              <p className="text-3xl font-extrabold text-[#111827] leading-none">{value}</p>
+              <p className="text-xs text-[#4B7A62] font-medium">{label}</p>
             </div>
           ))}
-          <p className="text-xs text-[#6B7A8D] italic hidden sm:block">from Pakistan-based applicants in 2024</p>
         </div>
       </div>
 
@@ -314,7 +311,7 @@ export default async function HomePage({
       <div className="bg-[#F7F9FB] py-14">
         <div className="max-w-4xl mx-auto px-4">
           <h2 className="text-2xl font-bold text-[#111827] mb-8 text-center">
-            Why Remote Jobs PK?
+            Why Earn Remotely?
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {WHY_PROPS.map(({ Icon, title, desc }) => (

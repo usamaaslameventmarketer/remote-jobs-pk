@@ -6,7 +6,7 @@ import { CompanyLogo } from '@/components/CompanyLogo'
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
-  title: 'Companies — Remote Jobs PK',
+  title: 'Companies — Earn Remotely',
   description: 'Browse companies hiring remote talent from Pakistan.',
 }
 

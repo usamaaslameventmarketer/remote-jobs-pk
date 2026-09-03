@@ -33,14 +33,14 @@ export async function POST(req: NextRequest) {
   const confirmUrl = `${baseUrl}/alerts/confirm?token=${confirmToken}`
 
   await resend.emails.send({
-    from: 'Remote Jobs PK <alerts@remotejobs.pk>',
+    from: 'Earn Remotely <alerts@remotejobs.pk>',
     to: email,
     subject: 'Confirm your job alerts',
     html: `
       <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;color:#111827">
         <p style="font-size:18px;font-weight:700;margin:0 0 8px">You're almost subscribed</p>
         <p style="font-size:14px;color:#6B7A8D;margin:0 0 24px">
-          Click the button below to confirm your daily job alerts from Remote Jobs PK.
+          Click the button below to confirm your daily job alerts from Earn Remotely.
           You'll get one email per day — only when new listings are added.
         </p>
         <a href="${confirmUrl}" style="display:inline-block;background:#1A6B4A;color:#fff;font-size:14px;font-weight:600;padding:12px 24px;border-radius:8px;text-decoration:none">

@@ -9,7 +9,7 @@ export function Footer() {
         <div className="flex flex-col sm:flex-row justify-between gap-8 mb-8">
           {/* Left: brand + tagline */}
           <div className="max-w-xs">
-            <p className="text-white font-bold text-lg mb-2">Remote Jobs PK</p>
+            <p className="text-white font-bold text-lg mb-2">Earn Remotely</p>
             <p className="text-[#5E7E9A] text-sm leading-relaxed">
               Curated remote jobs for Pakistani talent. Earn in USD.{' '}
               <span className="inline-flex items-center gap-0.5">
@@ -61,7 +61,7 @@ export function Footer() {
         {/* Bottom bar */}
         <div className="border-t border-[#1a3050] pt-5">
           <p className="text-[#5E7E9A] text-xs text-center sm:text-left">
-            © 2026 Remote Jobs PK · Made for Pakistan
+            © 2026 Earn Remotely · Made for Pakistan
           </p>
         </div>
       </div>
