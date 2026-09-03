@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import Image from 'next/image'
 
 const PALETTE = [
   '#1A6B4A', '#1B4D89', '#6D3A9C', '#B45309', '#0F6B75', '#9D1B4B',
@@ -37,7 +38,7 @@ export function CompanyLogo({
   }
 
   return (
-    <img
+    <Image
       src={logoUrl}
       alt={name}
       width={size}

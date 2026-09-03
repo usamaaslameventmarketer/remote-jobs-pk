@@ -346,7 +346,7 @@ export default function PostAJobPage() {
             <input type="text" required value={form.title} onChange={field('title')} placeholder="Senior Product Designer" className={inputClass} />
           </Field>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Department" required>
               <select required value={form.category} onChange={field('category')} className={inputClass}>
                 <option value="">Select…</option>
