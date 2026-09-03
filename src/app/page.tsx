@@ -7,11 +7,21 @@ import { ListingGrid } from '@/components/ListingGrid'
 import { AlertSubscribe } from '@/components/AlertSubscribe'
 import { CategoryBrowse } from '@/components/CategoryBrowse'
 import { Testimonials } from '@/components/Testimonials'
-import { Search, ExternalLink, DollarSign, ShieldCheck } from 'lucide-react'
+import { Search, ExternalLink, DollarSign, ShieldCheck, PhoneCall, Briefcase } from 'lucide-react'
+import Image from 'next/image'
 
 export const revalidate = 60
 
 const PAGE_SIZE = 50
+
+async function getLogoCompanies() {
+  const { data } = await supabase
+    .from('companies')
+    .select('id, name, logo_url')
+    .not('logo_url', 'is', null)
+    .limit(200)
+  return data ?? []
+}
 
 async function getListings({
   q,
@@ -127,6 +137,7 @@ export default async function HomePage({
   searchParams: Promise<{ q?: string; seniority?: string; region?: string; category?: string; page?: string }>
 }) {
   const { q, seniority, region, category, page: pageStr } = await searchParams
+  const logoCompanies = await getLogoCompanies()
   const page = Math.max(0, parseInt(pageStr ?? '0', 10) || 0)
 
   const { listings, totalCount } = await getListings({ q, seniority, region, category, page })
@@ -159,22 +170,27 @@ export default async function HomePage({
   const baseHref = filterParams.toString() ? `/?${filterParams.toString()}&` : '/?'
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)
 
+  const IMPACT_STATS = [
+    { Icon: PhoneCall, value: '200+', label: 'Interview Calls Generated' },
+    { Icon: Briefcase, value: '75', label: 'Job Placements' },
+  ]
+
   return (
     <>
       {/* Hero section */}
-      <div style={{ background: 'linear-gradient(135deg, #0F2137 0%, #1A3050 100%)' }}>
-        <div className="max-w-4xl mx-auto px-4 py-14 text-center">
+      <div style={{ background: 'linear-gradient(160deg, #080F1A 0%, #0D1F35 40%, #122845 70%, #1A3A5C 100%)' }}>
+        <div className="max-w-4xl mx-auto px-4 py-16 text-center">
           {/* Eyebrow badge */}
           <div className="inline-flex items-center gap-2 bg-[#1A6B4A] text-white text-xs font-semibold px-3 py-1.5 rounded-full mb-5">
             <span>🇵🇰</span>
             <span>For Pakistan-based talent</span>
           </div>
 
-          <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight mb-3 leading-tight">
-            Find Remote Work at the World&apos;s Best Companies
+          <h1 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight mb-3 leading-tight">
+            Earn in Dollars.<br className="hidden sm:block" /> Work From Anywhere in Pakistan.
           </h1>
-          <p className="text-[#8AAEC8] text-sm sm:text-base leading-relaxed mb-7">
-            Every listing manually curated. Direct application links. USD income.
+          <p className="text-[#8AAEC8] text-sm sm:text-base leading-relaxed mb-7 max-w-lg mx-auto">
+            Every listing manually curated. Direct application links. No middlemen.
           </p>
 
           <Suspense>
@@ -182,17 +198,17 @@ export default async function HomePage({
           </Suspense>
 
           {/* Stats row */}
-          <div className="mt-6 flex items-center justify-center gap-0 divide-x divide-[#1A3050]">
+          <div className="mt-6 flex items-center justify-center gap-0 divide-x divide-[#1E3A5C]">
             <div className="px-5 py-2 text-center">
-              <p className="text-lg font-bold text-[#1A6B4A]">{totalCount.toLocaleString()}+</p>
-              <p className="text-xs text-[#8AAEC8]">Listings</p>
+              <p className="text-xl font-bold text-[#34D399]">{totalCount.toLocaleString()}+</p>
+              <p className="text-xs text-[#8AAEC8]">Open Roles</p>
             </div>
             <div className="px-5 py-2 text-center">
-              <p className="text-lg font-bold text-white">90+</p>
+              <p className="text-xl font-bold text-white">90+</p>
               <p className="text-xs text-[#8AAEC8]">Top Companies</p>
             </div>
             <div className="px-5 py-2 text-center">
-              <p className="text-lg font-bold text-white">Every 6h</p>
+              <p className="text-xl font-bold text-white">Every 6h</p>
               <p className="text-xs text-[#8AAEC8]">Updated</p>
             </div>
           </div>
@@ -203,8 +219,51 @@ export default async function HomePage({
         </div>
       </div>
 
+      {/* Impact stats bar */}
+      <div className="bg-[#F0F7F4] border-y border-[#C8E6D8] py-6">
+        <div className="max-w-4xl mx-auto px-4 flex flex-wrap items-center justify-center gap-10">
+          {IMPACT_STATS.map(({ Icon, value, label }) => (
+            <div key={label} className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-[#1A6B4A] flex items-center justify-center shrink-0">
+                <Icon size={18} className="text-white" aria-hidden="true" />
+              </div>
+              <div>
+                <p className="text-2xl font-extrabold text-[#111827] leading-none">{value}</p>
+                <p className="text-xs text-[#4B7A62] font-medium mt-0.5">{label}</p>
+              </div>
+            </div>
+          ))}
+          <p className="text-xs text-[#6B7A8D] italic hidden sm:block">from Pakistan-based applicants in 2024</p>
+        </div>
+      </div>
+
+      {/* Company logos strip */}
+      {logoCompanies.length > 0 && (
+        <div className="bg-white border-b border-[#E5EAF0] py-6">
+          <div className="max-w-4xl mx-auto px-4">
+            <p className="text-xs font-semibold text-[#9BAFC4] uppercase tracking-widest text-center mb-4">
+              Companies hiring right now
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-5">
+              {logoCompanies.slice(0, 16).map((c) => (
+                <div key={c.id} className="w-8 h-8 relative shrink-0 opacity-60 hover:opacity-100 transition-opacity" title={c.name}>
+                  <Image
+                    src={c.logo_url!}
+                    alt={c.name}
+                    width={32}
+                    height={32}
+                    className="object-contain rounded-sm"
+                    unoptimized
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Category browse section */}
-      <div className="bg-white py-10">
+      <div className="bg-[#F7F9FB] py-10">
         <div className="max-w-4xl mx-auto px-4">
           <h2 className="text-xl font-bold text-[#111827] mb-6 flex items-center gap-2">
             Browse by Department
@@ -252,7 +311,7 @@ export default async function HomePage({
       <Testimonials />
 
       {/* Why section */}
-      <div className="bg-white py-14">
+      <div className="bg-[#F7F9FB] py-14">
         <div className="max-w-4xl mx-auto px-4">
           <h2 className="text-2xl font-bold text-[#111827] mb-8 text-center">
             Why Remote Jobs PK?

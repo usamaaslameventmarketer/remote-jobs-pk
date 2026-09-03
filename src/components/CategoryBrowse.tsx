@@ -55,7 +55,7 @@ export function CategoryBrowse() {
         <Link
           key={value}
           href={`/?category=${encodeURIComponent(value)}`}
-          className={`flex flex-col items-center gap-3 rounded-xl bg-white border border-[#D1D9E0] border-l-4 ${border} p-4 transition-all hover:-translate-y-0.5 hover:shadow-md hover:border-[#9BAFC4] group`}
+          className={`flex flex-col items-center gap-3 rounded-xl bg-white border border-[#D1D9E0] border-l-4 ${border} p-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-[#9BAFC4] cursor-pointer group`}
         >
           <div className={`w-10 h-10 rounded-full ${color} flex items-center justify-center shrink-0`}>
             <Icon size={18} aria-hidden="true" />
