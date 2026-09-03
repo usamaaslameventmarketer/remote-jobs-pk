@@ -432,10 +432,10 @@ function deriveSeniority(title) {
   return 'mid'
 }
 
-function brandFetchLogo(domain) {
+function googleFaviconUrl(domain) {
   if (!domain) return null
   const d = domain.replace(/^https?:\/\//, '').split('/')[0]
-  return `https://cdn.brandfetch.io/${d}/w/200/h/200`
+  return `https://www.google.com/s2/favicons?domain=${d}&sz=128`
 }
 
 // ---------------------------------------------------------------------------
@@ -453,7 +453,7 @@ async function upsertCompany({ name, logo_url, website }) {
   const domain = website?.replace(/^https?:\/\//, '').split('/')[0] ?? null
   const { data, error } = await sb.from('companies').insert({
     name,
-    logo_url: logo_url || brandFetchLogo(domain),
+    logo_url: logo_url || googleFaviconUrl(domain),
     website: website || null,
     industry: null,
     pakistan_friendly: false,
