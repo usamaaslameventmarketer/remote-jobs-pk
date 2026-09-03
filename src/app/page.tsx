@@ -8,7 +8,7 @@ import { AlertSubscribe } from '@/components/AlertSubscribe'
 
 export const revalidate = 60
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 50
 
 async function getListings({
   q,
@@ -124,16 +124,14 @@ export default async function HomePage({
     return bC - aC
   })
 
-  // Build pagination hrefs preserving active filters
+  // Build pagination base href preserving active filters
   const filterParams = new URLSearchParams()
   if (q) filterParams.set('q', q)
   if (seniority) filterParams.set('seniority', seniority)
   if (region) filterParams.set('region', region)
   if (category) filterParams.set('category', category)
-  const base = filterParams.toString() ? `/?${filterParams.toString()}&` : '/?'
-  const hasMore = (page + 1) * PAGE_SIZE < totalCount
-  const prevHref = page > 0 ? `${base}page=${page - 1}` : null
-  const nextHref = hasMore ? `${base}page=${page + 1}` : null
+  const baseHref = filterParams.toString() ? `/?${filterParams.toString()}&` : '/?'
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
 
   return (
     <>
@@ -184,8 +182,9 @@ export default async function HomePage({
           <ListingGrid
             listings={sorted as any}
             totalCount={totalCount}
-            prevHref={prevHref}
-            nextHref={nextHref}
+            page={page}
+            totalPages={totalPages}
+            baseHref={baseHref}
           />
         )}
       </div>

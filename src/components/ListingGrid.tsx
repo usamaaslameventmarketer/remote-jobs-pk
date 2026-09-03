@@ -233,16 +233,63 @@ function PaywallGate({ lockedCount, isLoggedIn }: { lockedCount: number; isLogge
   )
 }
 
+function getPageNumbers(current: number, total: number): (number | 'ellipsis')[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i)
+  const show = new Set(
+    [0, 1, current - 1, current, current + 1, total - 2, total - 1].filter(p => p >= 0 && p < total)
+  )
+  const result: (number | 'ellipsis')[] = []
+  let prev = -1
+  for (const p of [...show].sort((a, b) => a - b)) {
+    if (prev !== -1 && p > prev + 1) result.push('ellipsis')
+    result.push(p)
+    prev = p
+  }
+  return result
+}
+
+function Pagination({ page, totalPages, baseHref }: { page: number; totalPages: number; baseHref: string }) {
+  if (totalPages <= 1) return null
+  const href = (p: number) => `${baseHref}page=${p}`
+  const pages = getPageNumbers(page, totalPages)
+  const btnBase = 'inline-flex items-center justify-center min-w-[2rem] h-8 px-2 rounded text-sm font-medium transition-colors'
+  return (
+    <div className="flex items-center justify-center gap-1 flex-wrap pt-4 mt-2 border-t border-[#D1D9E0]">
+      {page > 0 && (
+        <Link href={href(page - 1)} className={`${btnBase} text-[#1A6B4A] hover:bg-[#F0FAF5]`}>←</Link>
+      )}
+      {pages.map((p, i) =>
+        p === 'ellipsis' ? (
+          <span key={`e${i}`} className="px-1 text-[#9BAFC4] text-sm select-none">…</span>
+        ) : (
+          <Link
+            key={p}
+            href={href(p)}
+            className={`${btnBase} ${p === page ? 'bg-[#1A6B4A] text-white' : 'text-[#374151] hover:bg-[#F0FAF5]'}`}
+          >
+            {p + 1}
+          </Link>
+        )
+      )}
+      {page < totalPages - 1 && (
+        <Link href={href(page + 1)} className={`${btnBase} text-[#1A6B4A] hover:bg-[#F0FAF5]`}>→</Link>
+      )}
+    </div>
+  )
+}
+
 export function ListingGrid({
   listings,
   totalCount = 0,
-  prevHref,
-  nextHref,
+  page = 0,
+  totalPages = 1,
+  baseHref = '/?',
 }: {
   listings: ListingRow[]
   totalCount?: number
-  prevHref?: string | null
-  nextHref?: string | null
+  page?: number
+  totalPages?: number
+  baseHref?: string
 }) {
   // null = still checking, true/false = resolved
   const [isPro, setIsPro] = useState<boolean | null>(null)
@@ -281,20 +328,7 @@ export function ListingGrid({
         {listings.map((listing) => (
           <JobCard key={listing.id} listing={listing} />
         ))}
-        {(prevHref || nextHref) && (
-          <div className="flex items-center justify-between pt-4 mt-2 border-t border-[#D1D9E0]">
-            {prevHref ? (
-              <Link href={prevHref} className="text-sm font-medium text-[#1A6B4A] hover:underline">
-                ← Previous
-              </Link>
-            ) : <span />}
-            {nextHref ? (
-              <Link href={nextHref} className="text-sm font-medium text-[#1A6B4A] hover:underline">
-                Next →
-              </Link>
-            ) : <span />}
-          </div>
-        )}
+        <Pagination page={page} totalPages={totalPages} baseHref={baseHref} />
       </div>
     )
   }
@@ -314,12 +348,13 @@ export function ListingGrid({
           <PaywallGate lockedCount={Math.max(locked.length, totalCount - FREE_COUNT)} isLoggedIn={isLoggedIn} />
 
           {/* Blurred preview of locked listings */}
-          <div className="relative overflow-hidden rounded-xl" style={{ maxHeight: '520px' }}>
+          <div className="relative overflow-hidden rounded-xl max-h-[520px]">
             <div className="space-y-3 pointer-events-none select-none">
               {locked.slice(0, 6).map((listing, i) => (
                 <div
                   key={listing.id}
-                  style={{ filter: 'blur(5px)', opacity: Math.max(0.15, 1 - i * 0.18) }}
+                  className="blur-[5px]"
+                  style={{ opacity: Math.max(0.15, 1 - i * 0.18) }}
                 >
                   <JobCard listing={listing} />
                 </div>
