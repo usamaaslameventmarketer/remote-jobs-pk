@@ -34,6 +34,9 @@ ingest.log
 # env files (can opt-in for committing if needed)
 .env*
 
+# claude code local settings (may contain API keys)
+.claude/
+
 # vercel
 .vercel
 
