@@ -6,6 +6,44 @@ import { CompanyLogo } from '@/components/CompanyLogo'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * Some listings have short_summary with garbled text like
+ * "div class= content-intro p span style= font-family: arial..."
+ * This happens when Greenhouse/Lever source HTML was double-encoded (&lt;div&gt;):
+ * ingest's stripHtml removes real <> tags but not encoded ones; entity stripping
+ * then leaves bare HTML tag/attribute text. We clean in three passes:
+ * 1. Decode entities + strip any real tags now visible
+ * 2. Strip known HTML tag names and attr=value / CSS property fragments
+ * 3. If text still starts with lowercase garbage, skip to first prose sentence
+ */
+function cleanText(raw: string): string {
+  // Pass 1: entity decode + tag strip
+  let text = raw
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#\d+;/g, ' ')
+    .replace(/&[a-z]+;/gi, ' ')
+  text = text.replace(/<[^>]*>/g, ' ')
+  // Pass 2: strip bare HTML tag-name residue and CSS attribute/value fragments
+  text = text.replace(/\b(div|span|ul|ol|li|br|hr|tr|td|th|thead|tbody|section|article|header|footer|nav|main|blockquote|pre|figcaption|figure|form|input|button|textarea|select|iframe|img|svg|strong|em)\b/gi, ' ')
+  text = text.replace(/\b[a-z][a-z-]*=\s*\S+/gi, ' ')     // attr=value
+  text = text.replace(/\b[a-z][a-z-]+:\s*/gi, ' ')          // css-prop:
+  text = text.replace(/rgb\([^)]+\)/gi, ' ')                 // rgb(...)
+  text = text.replace(/#[0-9a-f]{3,6}\b/gi, ' ')            // hex colors
+  text = text.replace(/(?<![a-z])p(?![a-z])/gi, ' ')        // bare <p> residue
+  text = text.replace(/\s+/g, ' ').trim()
+  // Pass 3: if still starts with lowercase garbage, find first prose sentence
+  if (text.length > 0 && /^[a-z,]/.test(text)) {
+    const m = text.match(/[A-Z][a-z]+(?:\s+[a-zA-Z][a-z]+){1,}/)
+    if (m && m.index! > 0) text = text.slice(m.index)
+  }
+  return text.replace(/\s+/g, ' ').trim()
+}
+
 async function getListing(id: string) {
   const { data, error } = await supabase
     .from('listings')
@@ -54,7 +92,7 @@ export async function generateMetadata({
 
   return {
     title: `${listing.title} at ${company?.name ?? 'Unknown'} — Earn Remotely`,
-    description: listing.short_summary,
+    description: cleanText(listing.short_summary ?? ''),
   }
 }
 
@@ -219,8 +257,8 @@ export default async function ListingDetailPage({
               <h2 className="text-xs font-semibold text-[#6B7A8D] uppercase tracking-widest mb-3">
                 About this role
               </h2>
-              <p className="text-[#111827] leading-relaxed text-sm sm:text-base">
-                {listing.short_summary}
+              <p className="text-[#111827] leading-relaxed text-sm sm:text-base whitespace-pre-line">
+                {cleanText(listing.short_summary ?? '')}
               </p>
             </div>
 
