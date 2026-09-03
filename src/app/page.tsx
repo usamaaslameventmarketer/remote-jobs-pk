@@ -6,17 +6,25 @@ import { FilterBar } from '@/components/FilterBar'
 import { ListingGrid } from '@/components/ListingGrid'
 import { AlertSubscribe } from '@/components/AlertSubscribe'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 60
+
+const PAGE_SIZE = 20
 
 async function getListings({
+  q,
   seniority,
   region,
   category,
+  page,
 }: {
+  q?: string
   seniority?: string
   region?: string
   category?: string
+  page: number
 }) {
+  const offset = page * PAGE_SIZE
+
   let query = supabase
     .from('listings')
     .select(`
@@ -41,22 +49,23 @@ async function getListings({
         logo_url,
         industry
       )
-    `)
+    `, { count: 'exact' })
     .eq('is_active', true)
     .order('date_added', { ascending: false })
-    .range(0, 4999)
+    .range(offset, offset + PAGE_SIZE - 1)
 
+  if (q) query = query.ilike('title', `%${q}%`)
   if (seniority) query = query.eq('seniority', seniority)
   if (region) query = query.eq('region_eligibility', region)
   if (category) query = query.eq('category', category)
 
-  const { data, error } = await query
+  const { data, error, count } = await query
 
   if (error) {
     console.error('Error fetching listings:', error)
-    return []
+    return { listings: [], totalCount: 0 }
   }
-  return data || []
+  return { listings: data || [], totalCount: count ?? 0 }
 }
 
 function EmptyState({ hasFilters }: { hasFilters: boolean }) {
@@ -89,23 +98,12 @@ function EmptyState({ hasFilters }: { hasFilters: boolean }) {
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; seniority?: string; region?: string; category?: string }>
+  searchParams: Promise<{ q?: string; seniority?: string; region?: string; category?: string; page?: string }>
 }) {
-  const { q, seniority, region, category } = await searchParams
+  const { q, seniority, region, category, page: pageStr } = await searchParams
+  const page = Math.max(0, parseInt(pageStr ?? '0', 10) || 0)
 
-  const listings = await getListings({ seniority, region, category })
-
-  const filtered = q
-    ? listings.filter((l) => {
-        const s = q.toLowerCase()
-        const co = Array.isArray(l.companies) ? l.companies[0] : l.companies
-        return (
-          l.title.toLowerCase().includes(s) ||
-          co?.name?.toLowerCase().includes(s) ||
-          l.tags?.some((t: string) => t.toLowerCase().includes(s))
-        )
-      })
-    : listings
+  const { listings, totalCount } = await getListings({ q, seniority, region, category, page })
 
   const hasFilters = !!(q || seniority || region || category)
 
@@ -117,7 +115,7 @@ export default async function HomePage({
     unclear: 1,
     restricted_other_region: 0,
   }
-  const sorted = [...filtered].sort((a, b) => {
+  const sorted = [...listings].sort((a, b) => {
     const aF = (a as any).featured && (a as any).featured_until >= today ? 1 : 0
     const bF = (b as any).featured && (b as any).featured_until >= today ? 1 : 0
     if (bF !== aF) return bF - aF
@@ -126,16 +124,28 @@ export default async function HomePage({
     return bC - aC
   })
 
+  // Build pagination hrefs preserving active filters
+  const filterParams = new URLSearchParams()
+  if (q) filterParams.set('q', q)
+  if (seniority) filterParams.set('seniority', seniority)
+  if (region) filterParams.set('region', region)
+  if (category) filterParams.set('category', category)
+  const base = filterParams.toString() ? `/?${filterParams.toString()}&` : '/?'
+  const hasMore = (page + 1) * PAGE_SIZE < totalCount
+  const prevHref = page > 0 ? `${base}page=${page - 1}` : null
+  const nextHref = hasMore ? `${base}page=${page + 1}` : null
+
   return (
     <>
       {/* Search hero */}
       <div className="bg-white border-b border-[#D1D9E0]">
         <div className="max-w-4xl mx-auto px-4 py-10 sm:py-12 text-center">
-          <h1 className="text-2xl sm:text-3xl font-bold text-[#111827] tracking-tight mb-2">
-            Remote jobs for Pakistan-based talent
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#111827] tracking-tight mb-3">
+            Carefully curated remote jobs for Pakistani talent
           </h1>
-          <p className="text-[#6B7A8D] text-sm sm:text-base mb-7">
-            Every listing manually reviewed — no scam postings, no dead links.
+          <p className="text-[#6B7A8D] text-sm sm:text-base leading-relaxed mb-7">
+            Earn in USD from the comfort of home.<br className="hidden sm:block" />{' '}
+            Build a career at reputable global companies.
           </p>
           <Suspense>
             <SearchBar defaultValue={q} />
@@ -158,8 +168,8 @@ export default async function HomePage({
         </div>
 
         <p className="text-sm text-[#6B7A8D] mb-4">
-          {filtered.length}{' '}
-          {filtered.length === 1 ? 'position' : 'positions'} found
+          {totalCount}{' '}
+          {totalCount === 1 ? 'position' : 'positions'} found
           {hasFilters && ' — '}
           {hasFilters && (
             <Link href="/" className="text-[#1A6B4A] hover:underline">
@@ -168,10 +178,15 @@ export default async function HomePage({
           )}
         </p>
 
-        {filtered.length === 0 ? (
+        {sorted.length === 0 ? (
           <EmptyState hasFilters={hasFilters} />
         ) : (
-          <ListingGrid listings={sorted as any} />
+          <ListingGrid
+            listings={sorted as any}
+            totalCount={totalCount}
+            prevHref={prevHref}
+            nextHref={nextHref}
+          />
         )}
       </div>
     </>

@@ -233,7 +233,17 @@ function PaywallGate({ lockedCount, isLoggedIn }: { lockedCount: number; isLogge
   )
 }
 
-export function ListingGrid({ listings }: { listings: ListingRow[] }) {
+export function ListingGrid({
+  listings,
+  totalCount = 0,
+  prevHref,
+  nextHref,
+}: {
+  listings: ListingRow[]
+  totalCount?: number
+  prevHref?: string | null
+  nextHref?: string | null
+}) {
   // null = still checking, true/false = resolved
   const [isPro, setIsPro] = useState<boolean | null>(null)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
@@ -264,13 +274,27 @@ export function ListingGrid({ listings }: { listings: ListingRow[] }) {
 
   if (listings.length === 0) return null
 
-  // Pro users see everything
+  // Pro users see everything + pagination nav
   if (isPro === true) {
     return (
       <div className="space-y-3">
         {listings.map((listing) => (
           <JobCard key={listing.id} listing={listing} />
         ))}
+        {(prevHref || nextHref) && (
+          <div className="flex items-center justify-between pt-4 mt-2 border-t border-[#D1D9E0]">
+            {prevHref ? (
+              <Link href={prevHref} className="text-sm font-medium text-[#1A6B4A] hover:underline">
+                ← Previous
+              </Link>
+            ) : <span />}
+            {nextHref ? (
+              <Link href={nextHref} className="text-sm font-medium text-[#1A6B4A] hover:underline">
+                Next →
+              </Link>
+            ) : <span />}
+          </div>
+        )}
       </div>
     )
   }
@@ -287,7 +311,7 @@ export function ListingGrid({ listings }: { listings: ListingRow[] }) {
       {/* Show gate only once we know user isn't pro (avoid flash) */}
       {locked.length > 0 && isPro === false && (
         <>
-          <PaywallGate lockedCount={locked.length} isLoggedIn={isLoggedIn} />
+          <PaywallGate lockedCount={Math.max(locked.length, totalCount - FREE_COUNT)} isLoggedIn={isLoggedIn} />
 
           {/* Blurred preview of locked listings */}
           <div className="relative overflow-hidden rounded-xl" style={{ maxHeight: '520px' }}>
