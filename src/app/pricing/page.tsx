@@ -13,6 +13,7 @@ import {
 } from '@/lib/payment-config'
 
 const PRICE_PKR = 2_000
+const ORIGINAL_PRICE_PKR = 4_000
 
 const FEATURES = [
   'Unlimited access to all 1,300+ curated listings',
@@ -204,13 +205,24 @@ export default function PricingPage() {
       {/* Pricing card */}
       <div className="bg-white rounded-2xl border-2 border-[#1A6B4A] p-8 mb-8">
         <div className="mb-6">
-          <p className="text-sm font-semibold text-[#1A6B4A] uppercase tracking-wide mb-2">Pro Access</p>
+          <div className="flex items-center gap-2 mb-2">
+            <p className="text-sm font-semibold text-[#1A6B4A] uppercase tracking-wide">Pro Access</p>
+            <span className="inline-block bg-[#DC2626] text-white text-xs font-bold px-2 py-0.5 rounded-full tracking-wide">
+              50% OFF
+            </span>
+          </div>
+          {/* Strikethrough original price */}
+          <p className="text-sm text-[#9BAFC4] line-through mb-1">
+            PKR {ORIGINAL_PRICE_PKR.toLocaleString()}/month
+          </p>
+          {/* Current price */}
           <div className="flex items-baseline gap-2">
             <span className="text-4xl font-bold text-[#111827]">{PRICE_PKR.toLocaleString()}</span>
             <span className="text-xl font-semibold text-[#6B7A8D]">PKR</span>
             <span className="text-[#6B7A8D] text-sm">/month</span>
           </div>
           <p className="text-xs text-[#9BAFC4] mt-1">~$7 USD · 30 days per payment · cancel anytime</p>
+          <p className="text-xs font-medium text-[#DC2626] mt-2">Offer ends September 30</p>
         </div>
 
         <ul className="space-y-3 mb-8">
