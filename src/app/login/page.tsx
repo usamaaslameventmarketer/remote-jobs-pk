@@ -86,7 +86,14 @@ export default function LoginPage() {
     if (password !== confirm) { setError('Passwords do not match.'); return }
     if (!name.trim()) { setError('Please enter your full name.'); return }
     setLoading(true)
-    const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name.trim() } } })
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: name.trim() },
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding/profile`,
+      },
+    })
     setLoading(false)
     if (error) {
       setError(
@@ -96,7 +103,7 @@ export default function LoginPage() {
       )
       return
     }
-    setMessage('Account created! Check your email to confirm your address, then sign in.')
+    setMessage('Account created! Check your email to confirm your address, then come back here to sign in.')
   }
 
   async function handleGoogleSignIn() {
