@@ -405,7 +405,7 @@ export default async function HomePage({
         ) : (
           <ListingGrid
             listings={sorted as any}
-            totalCount={useDefault ? sorted.length : totalCount}
+            totalCount={useDefault ? realTotal : totalCount}
             page={page}
             totalPages={totalPages}
             baseHref={baseHref}
