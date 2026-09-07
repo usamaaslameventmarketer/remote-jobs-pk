@@ -13,19 +13,33 @@ export default function AuthCallbackPage() {
     const code = params.get('code')
     const next = params.get('next') ?? '/onboarding/profile'
 
-    if (!code) {
-      // No code — may be a hash-based flow or a stale link; go home
-      router.replace('/')
-      return
-    }
-
-    supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-      if (error) {
+    if (code) {
+      // PKCE flow (?code=...)
+      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+        if (error) {
+          setError('This confirmation link is invalid or has already been used.')
+        } else {
+          router.replace(next)
+        }
+      })
+    } else if (window.location.hash.includes('access_token')) {
+      // OTP/email-confirm flow — session is in the hash fragment.
+      // Supabase JS picks it up automatically; wait for SIGNED_IN.
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          subscription.unsubscribe()
+          router.replace('/onboarding/profile')
+        }
+      })
+      // Clean up if nothing fires within 5s
+      const timeout = setTimeout(() => {
+        subscription.unsubscribe()
         setError('This confirmation link is invalid or has already been used.')
-      } else {
-        router.replace(next)
-      }
-    })
+      }, 5000)
+      return () => { subscription.unsubscribe(); clearTimeout(timeout) }
+    } else {
+      router.replace('/')
+    }
   }, [router])
 
   if (error) {
