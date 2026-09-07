@@ -96,6 +96,24 @@ const GREENHOUSE_SLUGS = [
   // General / Other (verified live)
   'asana', 'pagerduty',
   'liveperson', 'storyblok',
+
+  // Pakistan-explicit / South Asia remote hiring
+  // Global platforms that hire across South Asia and commonly post PK-eligible roles
+  'deel',                                   // Employer of record — hires worldwide incl. PK
+  'andela',                                 // Global talent marketplace (expanded beyond Africa)
+  'remitly',                                // Remittances — US↔PK is a top corridor
+  'velocityglobal',                         // Global employment platform
+  'papayaglobal',                           // Global payroll / EOR
+  // Pakistani tech companies & regional employers (404s silently skipped)
+  'arbisoft',                               // Lahore-based software house
+  'tkxel',                                  // Lahore-based software house
+  'devsinc',                                // Lahore-based software house
+  'folio3',                                 // Karachi/NJ software company
+  '10pearls',                               // Pakistani-American software company
+  'netsol',                                 // NetSol Technologies (NASDAQ-listed, Lahore)
+  'careem',                                 // Dubai/PK ride-hailing (Uber subsidiary)
+  'dubizzle',                               // EMPG — classifieds, large PK presence
+  'tajawal',                                // Travel tech, MENA/South Asia
 ]
 
 const LEVER_SLUGS = [
@@ -105,6 +123,10 @@ const LEVER_SLUGS = [
   'sonatype',                               // Software supply chain security — 34 jobs
   // Live but 0 jobs — keep in case they post
   'highspot', 'clari',
+  // Pakistan-explicit / South Asia remote hiring
+  'doist',                                  // Todoist — async-first, global distributed team
+  'buffer',                                 // Social media tool — fully remote, global
+  'remote',                                 // Remote.com — global employment platform
 ]
 
 // ---------------------------------------------------------------------------
@@ -594,6 +616,12 @@ async function fetchGreenhouse() {
     smartsheet: 'Smartsheet', samsara: 'Samsara', tripactions: 'Navan',
     mercury: 'Mercury', gocardless: 'GoCardless', tipaltisolutions: 'Tipalti',
     lithic: 'Lithic', upwork: 'Upwork', liveperson: 'LivePerson', storyblok: 'Storyblok',
+    // Pakistan-explicit / South Asia remote hiring
+    deel: 'Deel', andela: 'Andela', remitly: 'Remitly',
+    velocityglobal: 'Velocity Global', papayaglobal: 'Papaya Global',
+    arbisoft: 'Arbisoft', tkxel: 'Tkxel', devsinc: 'Devsinc',
+    folio3: 'Folio3', '10pearls': '10Pearls', netsol: 'NetSol Technologies',
+    careem: 'Careem', dubizzle: 'Dubizzle Group', tajawal: 'Tajawal',
   }
 
   // Process in batches to avoid holding all full-description HTML in memory simultaneously
