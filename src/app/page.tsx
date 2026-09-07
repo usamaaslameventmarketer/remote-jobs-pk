@@ -14,6 +14,20 @@ export const revalidate = 60
 
 const PAGE_SIZE = 50
 
+// Known local Pakistani companies — shown after global companies in Pakistan filter
+const LOCAL_PK_COMPANIES = new Set([
+  'Smart Working Solutions',
+  'Arbisoft',
+  'Systems Limited',
+  'Netsol Technologies',
+  'Techlogix',
+  'Ignite',
+  'Tkxel',
+  'Folio3',
+  'Devsinc',
+  'Contour Software',
+])
+
 async function getLogoCompanies() {
   const { data } = await supabase
     .from('companies')
@@ -21,6 +35,57 @@ async function getLogoCompanies() {
     .not('logo_url', 'is', null)
     .limit(200)
   return data ?? []
+}
+
+async function getCuratedPool() {
+  const { data } = await supabase
+    .from('listings')
+    .select(`
+      id,
+      title,
+      seniority,
+      location_type,
+      region_eligibility,
+      region_confidence,
+      category,
+      tags,
+      salary_range,
+      short_summary,
+      date_added,
+      verified,
+      source,
+      featured,
+      featured_until,
+      companies (
+        id,
+        name,
+        logo_url,
+        industry
+      )
+    `)
+    .eq('is_active', true)
+    .order('date_added', { ascending: false })
+    .limit(200)
+  return data ?? []
+}
+
+function curateDiverseTop10(pool: any[]): any[] {
+  const result: any[] = []
+  const deptCount: Record<string, number> = {}
+  const companyCount: Record<string, number> = {}
+  const MAX_PER_DEPT = 3
+  const MAX_PER_COMPANY = 2
+  for (const listing of pool) {
+    if (result.length >= 10) break
+    const dept = listing.category ?? 'Other'
+    const companyId = listing.companies?.id ?? ''
+    if ((deptCount[dept] ?? 0) >= MAX_PER_DEPT) continue
+    if (companyId && (companyCount[companyId] ?? 0) >= MAX_PER_COMPANY) continue
+    result.push(listing)
+    deptCount[dept] = (deptCount[dept] ?? 0) + 1
+    if (companyId) companyCount[companyId] = (companyCount[companyId] ?? 0) + 1
+  }
+  return result
 }
 
 async function hasPakistanListings() {
@@ -149,15 +214,36 @@ export default async function HomePage({
   const logoCompanies = await getLogoCompanies()
   const page = Math.max(0, parseInt(pageStr ?? '0', 10) || 0)
 
-  const [{ listings, totalCount }, showPakistanFilter] = await Promise.all([
-    getListings({ q, seniority, region, category, page }),
+  const hasFilters = !!(q || seniority || region || category)
+  const useDefault = !hasFilters && page === 0
+
+  const [listingsResult, showPakistanFilter, realTotalResult] = await Promise.all([
+    useDefault
+      ? getCuratedPool().then((pool) => ({ listings: curateDiverseTop10(pool), totalCount: pool.length }))
+      : getListings({ q, seniority, region, category, page }),
     hasPakistanListings(),
+    useDefault
+      ? supabase.from('listings').select('*', { count: 'exact', head: true }).eq('is_active', true).then(({ count }) => count ?? 0)
+      : Promise.resolve(null),
   ])
 
-  const hasFilters = !!(q || seniority || region || category)
+  const { listings, totalCount: filteredCount } = listingsResult as { listings: any[]; totalCount: number }
+  // For the hero stat, always show real total; for filters show filtered count
+  const realTotal: number = useDefault ? (realTotalResult as number) : filteredCount
+  const totalCount = filteredCount
 
-  // Sort order: featured → confirmed_open → unclear → restricted_other_region
-  // Within each tier, preserve DB order (date_added desc)
+  // Compute company prominence (count of listings per company in current result set)
+  const prominenceMap: Record<string, number> = {}
+  for (const l of listings) {
+    const cid = (l as any).companies?.id
+    if (cid) prominenceMap[cid] = (prominenceMap[cid] ?? 0) + 1
+  }
+
+  // Sort order:
+  //   1. Featured (active)
+  //   2. If Pakistan filter: global companies before local PK companies
+  //   3. Prominence (company listing count in result set, desc)
+  //   4. Confidence rank
   const today = new Date().toISOString().split('T')[0]
   const CONFIDENCE_RANK: Record<string, number> = {
     confirmed_open: 2,
@@ -168,6 +254,19 @@ export default async function HomePage({
     const aF = (a as any).featured && (a as any).featured_until >= today ? 1 : 0
     const bF = (b as any).featured && (b as any).featured_until >= today ? 1 : 0
     if (bF !== aF) return bF - aF
+
+    // Pakistan filter: global-first ordering
+    if (region === 'Pakistan') {
+      const aLocal = LOCAL_PK_COMPANIES.has((a as any).companies?.name ?? '') ? 1 : 0
+      const bLocal = LOCAL_PK_COMPANIES.has((b as any).companies?.name ?? '') ? 1 : 0
+      if (aLocal !== bLocal) return aLocal - bLocal
+    }
+
+    // Prominence (higher = more active listings = bigger company)
+    const aProm = prominenceMap[(a as any).companies?.id ?? ''] ?? 0
+    const bProm = prominenceMap[(b as any).companies?.id ?? ''] ?? 0
+    if (bProm !== aProm) return bProm - aProm
+
     const aC = CONFIDENCE_RANK[(a as any).region_confidence ?? 'unclear'] ?? 1
     const bC = CONFIDENCE_RANK[(b as any).region_confidence ?? 'unclear'] ?? 1
     return bC - aC
@@ -180,7 +279,8 @@ export default async function HomePage({
   if (region) filterParams.set('region', region)
   if (category) filterParams.set('category', category)
   const baseHref = filterParams.toString() ? `/?${filterParams.toString()}&` : '/?'
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
+  // Default (curated) view has no pagination — only filtered/paged views paginate
+  const totalPages = useDefault ? 1 : Math.ceil(totalCount / PAGE_SIZE)
 
   const IMPACT_STATS = [
     { Icon: PhoneCall, value: '200+', label: 'Interview Calls Generated' },
@@ -212,7 +312,7 @@ export default async function HomePage({
           {/* Stats row */}
           <div className="mt-6 flex items-center justify-center gap-0 divide-x divide-[#1E3A5C]">
             <div className="px-5 py-2 text-center">
-              <p className="text-xl font-bold text-[#34D399]">{totalCount.toLocaleString()}+</p>
+              <p className="text-xl font-bold text-[#34D399]">{realTotal.toLocaleString()}+</p>
               <p className="text-xs text-[#8AAEC8]">Open Roles</p>
             </div>
             <div className="px-5 py-2 text-center">
@@ -294,14 +394,10 @@ export default async function HomePage({
         </div>
 
         <p className="text-sm text-[#6B7A8D] mb-4">
-          {totalCount}{' '}
-          {totalCount === 1 ? 'position' : 'positions'} found
-          {hasFilters && ' — '}
-          {hasFilters && (
-            <Link href="/" className="text-[#1A6B4A] hover:underline">
-              clear filters
-            </Link>
-          )}
+          {useDefault
+            ? <>Showing <strong>10 curated picks</strong> from {realTotal.toLocaleString()}+ open roles</>
+            : <>{totalCount}{' '}{totalCount === 1 ? 'position' : 'positions'} found{hasFilters && (<>{' — '}<Link href="/" className="text-[#1A6B4A] hover:underline">clear filters</Link></>)}</>
+          }
         </p>
 
         {sorted.length === 0 ? (
@@ -309,7 +405,7 @@ export default async function HomePage({
         ) : (
           <ListingGrid
             listings={sorted as any}
-            totalCount={totalCount}
+            totalCount={useDefault ? sorted.length : totalCount}
             page={page}
             totalPages={totalPages}
             baseHref={baseHref}

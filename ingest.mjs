@@ -113,6 +113,16 @@ const GREENHOUSE_SLUGS = [
   'dubizzle',                               // EMPG — classifieds, large PK presence
 ]
 
+const RECRUITEE_SLUGS = [
+  // Verified live — Pakistan-relevant companies on Recruitee
+  { slug: 'allshoretalent', name: 'AllShore Talent', website: 'https://allshoretalent.com' },
+]
+
+const WORKABLE_SLUGS = [
+  // Verified live — has explicit Pakistan-tagged roles with salary data
+  { slug: 'remote-raven', name: 'Remote Raven', website: 'https://remoteraven.com' },
+]
+
 const LEVER_SLUGS = [
   // Verified live
   'toptal', 'omnisend', 'whereby',
@@ -377,7 +387,7 @@ function classifyCategory(title, tags = [], apiCategory = '') {
   if (/customer\s+(service|support|success)|support\s+specialist|help\s+desk|\bux\s+designer\b|\bui\s+designer\b|graphic\s+designer|product\s+(manager|designer|owner|lead)|visual\s+designer|operations\s+manager|project\s+manager|program\s+manager|\bscrum\b|agile\s+coach|technical\s+writer|community\s+manager|social\s+media\s+manager|content\s+creator|data\s+entry|transcri|virtual\s+assistant|supply\s+chain|logistics|procurement|purchasing|copywriter|creative\s+director|store\s+manager|retail|barber|cleaner|cleaning|maintenance\s+(tech|planner|worker)|room\s+attendant|bell\s+(person|hop)|lifeguard|painter\b|sandblaster|infanteer|surveyor|estimator|porter\b|coffee\s+roaster|merchandis|loss\s+prevention|facilities\s+planner|operator\s+sewing|sub\s+agent|general\s+manager|cabin\s+clean|\bbusiness\s+analyst\b|\bdata\s+analyst\b|\bdata\s+label(er|ing)\b|annotation\s+specialist|\bai\s+trainer\b|model\s+eval(uator)?|travel\s+consultant|\bfleet\s+|\btechnical\s+evangelist\b|\bdeveloper\s+evangelist\b/i.test(t)) return 'exclude'
 
   // ── Software Development / Engineering ───────────────────────────────────
-  if (/\b(software\s+engineer|software\s+developer|software\s+architect|web\s+developer|backend\s+engineer|frontend\s+engineer|front.?end\s+engineer|full.?stack\s+engineer|full.?stack\s+developer|mobile\s+engineer|mobile\s+developer|ios\s+engineer|android\s+engineer|devops\s+engineer|\bsre\b|site\s+reliability\s+engineer|platform\s+engineer|data\s+engineer|ml\s+engineer|machine\s+learning\s+engineer|ai\s+engineer|security\s+engineer|network\s+engineer|solutions\s+architect|solutions\s+engineer|cloud\s+engineer|cloud\s+architect|firmware\s+engineer|embedded\s+engineer|blockchain\s+developer|data\s+scientist|programmer|developer|qa\s+engineer|quality\s+engineer|automation\s+engineer|database\s+admin|\bdba\b|\bdevops\b|\bsysadmin\b|principal\s+engineer|staff\s+engineer|founding\s+engineer|engineering\s+manager|infrastructure\s+engineer|implementation\s+engineer|\bengineer\b)\b/i.test(t)) return 'Software Development'
+  if (/\b(software\s+engineer|software\s+developer|software\s+architect|web\s+developer|backend\s+engineer|frontend\s+engineer|front.?end\s+engineer|full.?stack\s+engineer|full.?stack\s+developer|mobile\s+engineer|mobile\s+developer|ios\s+engineer|android\s+engineer|devops\s+engineer|\bsre\b|site\s+reliability\s+engineer|platform\s+engineer|data\s+engineer|ml\s+engineer|machine\s+learning\s+engineer|ai\s+engineer|security\s+engineer|network\s+engineer|solutions?\s+architect|solutions\s+engineer|cloud\s+engineer|cloud\s+architect|firmware\s+engineer|embedded\s+engineer|blockchain\s+developer|data\s+scientist|programmer|developer|qa\s+engineer|quality\s+engineer|automation\s+engineer|database\s+admin|\bdba\b|\bdevops\b|\bsysadmin\b|principal\s+engineer|staff\s+engineer|founding\s+engineer|engineering\s+manager|infrastructure\s+engineer|implementation\s+engineer|\bengineer\b|\barchitect\b)\b/i.test(t)) return 'Software Development'
   if (/\bsoftware.?dev(elopment)?\b|\bdevops\b|\bsysadmin\b|\bdata\s+science\b|\bmachine\s+learning\b/i.test(cat)) return 'Software Development'
 
   // ── Sales ─────────────────────────────────────────────────────────────────
@@ -504,6 +514,18 @@ function htmlToStructuredText(html, maxLen = Infinity) {
     .replace(/\n{3,}/g, '\n\n')
     .trim()
   return text.slice(0, maxLen)
+}
+
+/**
+ * Best-effort salary extraction from free-text descriptions.
+ * Returns a short string like "$60,000 - $80,000/year" or null.
+ */
+function extractSalaryFromText(text) {
+  if (!text) return null
+  const m = (text).match(
+    /(?:USD|PKR|\$|€|£|GBP)\s*[\d,]+(?:\.?\d+)?(?:k|K)?(?:\s*[-–\/to]+\s*(?:USD|PKR|\$|€|£|GBP)?\s*[\d,]+(?:\.?\d+)?(?:k|K)?)?(?:\s*(?:per\s+)?(?:year|yr|annual|month|mo|hr|hour))?/i,
+  )
+  return m ? m[0].trim().slice(0, 100) : null
 }
 
 function deriveSeniority(title) {
@@ -787,6 +809,158 @@ async function fetchLever() {
   return jobs
 }
 
+async function fetchRecruitee() {
+  console.log(`[Recruitee] Fetching ${RECRUITEE_SLUGS.length} company boards...`)
+  const jobs = []
+
+  for (const { slug, name, website } of RECRUITEE_SLUGS) {
+    try {
+      const res = await fetch(`https://${slug}.recruitee.com/api/offers/`, {
+        headers: { 'User-Agent': 'RemoteJobsPK/1.0' },
+        signal: AbortSignal.timeout(12000),
+      })
+      if (!res.ok) { process.stdout.write(`  ${name}: skipped (${res.status})\n`); continue }
+      const { offers } = await res.json()
+      if (!Array.isArray(offers)) continue
+      process.stdout.write(`  ${name}: ${offers.length} jobs\n`)
+
+      for (const o of offers) {
+        const title = o.translations?.en?.title ?? o.title ?? ''
+        if (!title) continue
+
+        const descHtml = o.translations?.en?.description ?? o.description ?? ''
+        const reqHtml = o.translations?.en?.requirements ?? o.requirements ?? ''
+        const combined = descHtml + ' ' + reqHtml
+        const fullDesc = stripHtml(combined, 3000)
+        const fullDescStructured = htmlToStructuredText(combined, 3000)
+
+        // Location: remote or on-site? Build string for classifyRegion
+        const countryIso = o.country_code ?? ''
+        const locationStr = (o.remote || !o.on_site)
+          ? `Remote${countryIso ? ` (${countryIso})` : ''}`
+          : `${o.city ?? ''} ${countryIso}`.trim()
+
+        // Salary: Recruitee has explicit min/max fields OR extract from text
+        const sal = o.salary ?? {}
+        let salary_range = null
+        if (sal.min && sal.max) {
+          const fmt = (n) => Math.round(n).toLocaleString()
+          salary_range = `${sal.currency || 'USD'} ${fmt(sal.min)} - ${fmt(sal.max)}/year`
+        } else {
+          salary_range = extractSalaryFromText(fullDesc)
+        }
+
+        jobs.push({
+          _source: 'Recruitee',
+          title,
+          company_name: o.company_name ?? name,
+          company_logo: null,
+          company_website: website,
+          original_url: o.careers_url ?? o.careers_apply_url ?? '',
+          tags: o.tags ?? [],
+          api_category: o.category_code ?? o.department ?? '',
+          location: locationStr,
+          salary_range,
+          short_summary: fullDesc.slice(0, 500),
+          _fullDesc: fullDesc,
+          _fullDescStructured: fullDescStructured,
+          date_posted: o.published_at ? o.published_at.split('T')[0] : null,
+          seniority: deriveSeniority(title),
+        })
+      }
+    } catch (err) {
+      process.stdout.write(`  ${name}: error (${err.message})\n`)
+    }
+  }
+
+  console.log(`[Recruitee] Done — ${jobs.length} raw jobs total`)
+  return jobs
+}
+
+async function fetchWorkable() {
+  console.log(`[Workable] Fetching ${WORKABLE_SLUGS.length} company boards...`)
+  const jobs = []
+
+  for (const { slug, name, website } of WORKABLE_SLUGS) {
+    try {
+      // Paginate through all published jobs
+      const allRaw = []
+      let token = null
+      do {
+        const body = { query: '', location: [], department: [], worktype: [], remote: [] }
+        if (token) body.token = token
+        const res = await fetch(`https://apply.workable.com/api/v3/accounts/${slug}/jobs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'User-Agent': 'RemoteJobsPK/1.0' },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(12000),
+        })
+        if (!res.ok) { process.stdout.write(`  ${name}: skipped (${res.status})\n`); break }
+        const data = await res.json()
+        allRaw.push(...(data.results ?? []))
+        token = data.nextPage ?? null
+      } while (token)
+
+      process.stdout.write(`  ${name}: ${allRaw.length} jobs (fetching descriptions...)\n`)
+
+      // Only process remote published jobs — fetch meta description per job in batches
+      const remoteJobs = allRaw.filter(j => j.workplace === 'remote' && j.state === 'published')
+      const BATCH = 5
+      for (let b = 0; b < remoteJobs.length; b += BATCH) {
+        await Promise.allSettled(
+          remoteJobs.slice(b, b + BATCH).map(async (j) => {
+            const countries = (j.locations ?? []).filter(l => !l.hidden).map(l => l.country)
+            const hasPakistan = countries.includes('Pakistan')
+
+            // Build location string: Pakistan overrides everything; single country otherwise; Worldwide for multi
+            const locationStr = hasPakistan
+              ? 'Remote (Pakistan)'
+              : countries.length === 1
+                ? `Remote (${countries[0]})`
+                : 'Remote'
+
+            // Fetch job page meta description (only data available without JS rendering)
+            let shortSummary = ''
+            try {
+              const html = await fetch(`https://apply.workable.com/${slug}/j/${j.shortcode}/`, {
+                headers: { 'User-Agent': 'RemoteJobsPK/1.0' },
+                signal: AbortSignal.timeout(8000),
+              }).then(r => r.text())
+              const mDesc = html.match(/<meta[^>]+name=["']description["'][^>]*content=["']([^"']+)["']/i)
+                ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["']/i)
+                ?? html.match(/<meta[^>]+property=["']og:description["'][^>]*content=["']([^"']+)["']/i)
+              shortSummary = mDesc ? mDesc[1].trim() : ''
+            } catch { /* silent */ }
+
+            jobs.push({
+              _source: 'Workable',
+              title: j.title ?? '',
+              company_name: name,
+              company_logo: null,
+              company_website: website,
+              original_url: `https://apply.workable.com/${slug}/j/${j.shortcode}/`,
+              tags: [],
+              api_category: Array.isArray(j.department) ? j.department.join(' ') : (j.department ?? ''),
+              location: locationStr,
+              salary_range: extractSalaryFromText(shortSummary),
+              short_summary: shortSummary.slice(0, 500),
+              _fullDesc: shortSummary,
+              _fullDescStructured: shortSummary,
+              date_posted: j.published ? j.published.split('T')[0] : null,
+              seniority: deriveSeniority(j.title ?? ''),
+            })
+          })
+        )
+      }
+    } catch (err) {
+      process.stdout.write(`  ${name}: error (${err.message})\n`)
+    }
+  }
+
+  console.log(`[Workable] Done — ${jobs.length} raw jobs total`)
+  return jobs
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -830,6 +1004,8 @@ async function ingest() {
   for (const [name, fn] of [
     ['Greenhouse', fetchGreenhouse],
     ['Lever', fetchLever],
+    ['Recruitee', fetchRecruitee],
+    ['Workable', fetchWorkable],
   ]) {
     try {
       sourceResults[name] = await fn()

@@ -7,14 +7,14 @@ import { MapPin, Briefcase, BarChart2 } from 'lucide-react'
 
 const BASE_LOCATION_OPTIONS = [
   { label: 'All Locations', value: '' },
-  { label: 'Worldwide', value: 'Worldwide' },
+  { label: 'Global Companies Hiring Worldwide, Including Pakistan', shortLabel: 'Worldwide', value: 'Worldwide' },
   { label: 'USA', value: 'USA' },
   { label: 'UK', value: 'UK' },
   { label: 'EMEA', value: 'EMEA' },
   { label: 'APAC', value: 'APAC' },
 ]
 
-const PAKISTAN_OPTION = { label: '🇵🇰 Pakistan (explicit)', value: 'Pakistan' }
+const PAKISTAN_OPTION = { label: '🇵🇰 Global Companies Hiring from Pakistan Specifically', shortLabel: '🇵🇰 Pakistan Only', value: 'Pakistan' }
 
 const DEPARTMENT_OPTIONS = [
   { label: 'All Departments', value: '' },
@@ -45,7 +45,7 @@ function Dropdown({
   Icon,
 }: {
   label: string
-  options: { label: string; value: string }[]
+  options: { label: string; shortLabel?: string; value: string }[]
   paramKey: string
   currentValue: string
   q: string
@@ -95,7 +95,7 @@ function Dropdown({
         }`}
       >
         {Icon && <Icon size={13} aria-hidden="true" />}
-        {hasSelection ? `${label}: ${selected?.label}` : label}
+        {hasSelection ? `${label}: ${selected?.shortLabel ?? selected?.label}` : label}
         <svg
           width="12"
           height="12"
