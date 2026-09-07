@@ -111,7 +111,7 @@ const GREENHOUSE_SLUGS = [
   'folio3',                                 // Karachi/NJ software company
   '10pearls',                               // Pakistani-American software company
   'netsol',                                 // NetSol Technologies (NASDAQ-listed, Lahore)
-  'careem',                                 // Dubai/PK ride-hailing (Uber subsidiary)
+  // 'careem' removed — in-office employer, not remote
   'dubizzle',                               // EMPG — classifieds, large PK presence
   'tajawal',                                // Travel tech, MENA/South Asia
 ]
@@ -222,7 +222,7 @@ function classifyRegion(location, source) {
   // region keyword → almost certainly an in-office listing, reject it.
   if (!isAggregator && raw) {
     const hasRemoteKeyword = /remote/i.test(raw)
-    const hasBroadRegion = /\b(emea|apac|asia.?pacific|worldwide|global|anywhere|international|pakistan|south[\s-]?asia)\b/i.test(raw)
+    const hasBroadRegion = /\b(emea|apac|asia.?pacific|worldwide|global|anywhere|international)\b/i.test(raw)
     if (!hasRemoteKeyword && !hasBroadRegion) return null
   }
 
@@ -240,8 +240,11 @@ function classifyRegion(location, source) {
     /worldwide|global|anywhere|international|open globally|location independent|work from anywhere|\bwfa\b|all countries|any country|no geographic restriction|fully remote/.test(stripped)
   ) return 'Worldwide'
 
-  // Pakistan / South Asia — explicit target audience → own region tag
-  if (/pakistan|south[\s-]?asia/.test(stripped)) return 'Pakistan'
+  // Pakistan / South Asia — only when location explicitly says Remote + Pakistan
+  // "Remote (Pakistan)" → 'Pakistan', but "Karachi, Pakistan" → null (in-office)
+  if (/pakistan|south[\s-]?asia/.test(stripped)) {
+    return /remote/i.test(raw) ? 'Pakistan' : null
+  }
 
   // EMEA — Europe, Middle East, Africa (broad keyword or any specific country)
   if (
