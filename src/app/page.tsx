@@ -65,8 +65,12 @@ async function getCuratedPool() {
     `)
     .eq('is_active', true)
     .order('date_added', { ascending: false })
-    .limit(200)
+    .limit(500)
   return data ?? []
+}
+
+function resolveCompany(companies: any): any {
+  return Array.isArray(companies) ? companies[0] : companies
 }
 
 function curateDiverseTop10(pool: any[]): any[] {
@@ -78,12 +82,15 @@ function curateDiverseTop10(pool: any[]): any[] {
   for (const listing of pool) {
     if (result.length >= 10) break
     const dept = listing.category ?? 'Other'
-    const companyId = listing.companies?.id ?? ''
+    const company = resolveCompany(listing.companies)
+    // Key by normalised name — handles both null IDs and multiple DB records
+    // for the same company (e.g. "Welo Data" vs "Welo Data, Inc.")
+    const companyKey = (company?.name ?? '').toLowerCase().trim()
     if ((deptCount[dept] ?? 0) >= MAX_PER_DEPT) continue
-    if (companyId && (companyCount[companyId] ?? 0) >= MAX_PER_COMPANY) continue
+    if (companyKey && (companyCount[companyKey] ?? 0) >= MAX_PER_COMPANY) continue
     result.push(listing)
     deptCount[dept] = (deptCount[dept] ?? 0) + 1
-    if (companyId) companyCount[companyId] = (companyCount[companyId] ?? 0) + 1
+    if (companyKey) companyCount[companyKey] = (companyCount[companyKey] ?? 0) + 1
   }
   return result
 }
@@ -222,8 +229,23 @@ export default async function HomePage({
       ? getCuratedPool().then((pool) => {
           const top10 = curateDiverseTop10(pool)
           const top10Ids = new Set(top10.map((l: any) => l.id))
-          // Append extra listings from the pool for the blur preview behind the paywall
-          const extras = pool.filter((l: any) => !top10Ids.has(l.id)).slice(0, 8)
+          // Extras for blur zone: max 1 per company, skip companies already at cap in top10
+          const top10CompanyCount: Record<string, number> = {}
+          for (const l of top10) {
+            const key = resolveCompany(l.companies)?.name?.toLowerCase().trim() ?? ''
+            if (key) top10CompanyCount[key] = (top10CompanyCount[key] ?? 0) + 1
+          }
+          const extras: any[] = []
+          const extraSeen = new Set<string>()
+          for (const l of pool) {
+            if (extras.length >= 8) break
+            if (top10Ids.has(l.id)) continue
+            const key = resolveCompany(l.companies)?.name?.toLowerCase().trim() ?? ''
+            if (key && (top10CompanyCount[key] ?? 0) >= 2) continue  // already at max in curated
+            if (key && extraSeen.has(key)) continue                   // already 1 extra for this company
+            extras.push(l)
+            if (key) extraSeen.add(key)
+          }
           return { listings: [...top10, ...extras], totalCount: pool.length }
         })
       : getListings({ q, seniority, region, category, page }),
