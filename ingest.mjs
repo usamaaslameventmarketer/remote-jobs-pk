@@ -100,8 +100,9 @@ const GREENHOUSE_SLUGS = [
   // Pakistan-explicit remote hiring (verified via Greenhouse job boards)
   'gomotive',                               // Motive — dozens of "Pakistan - Remote" active listings
   'podium81',                               // Podium — explicit Pakistan remote + Islamabad roles
-  'remotecom',                              // Remote.com — globally distributed, Pakistan-eligible
   'bobtail',                                // Bobtail — freight/logistics, explicit Karachi listings
+  // Note: remotecom removed — posts country-specific roles (e.g. "Payroll Specialist - Canada")
+  // with Worldwide location tags, causing false "Hires from Pakistan" badges.
   // Pakistani tech companies & regional employers (404s silently skipped if not on Greenhouse)
   'arbisoft',                               // Lahore-based software house
   'tkxel',                                  // Lahore-based software house
