@@ -219,7 +219,13 @@ export default async function HomePage({
 
   const [listingsResult, showPakistanFilter, realTotalResult] = await Promise.all([
     useDefault
-      ? getCuratedPool().then((pool) => ({ listings: curateDiverseTop10(pool), totalCount: pool.length }))
+      ? getCuratedPool().then((pool) => {
+          const top10 = curateDiverseTop10(pool)
+          const top10Ids = new Set(top10.map((l: any) => l.id))
+          // Append extra listings from the pool for the blur preview behind the paywall
+          const extras = pool.filter((l: any) => !top10Ids.has(l.id)).slice(0, 8)
+          return { listings: [...top10, ...extras], totalCount: pool.length }
+        })
       : getListings({ q, seniority, region, category, page }),
     hasPakistanListings(),
     useDefault
@@ -232,45 +238,52 @@ export default async function HomePage({
   const realTotal: number = useDefault ? (realTotalResult as number) : filteredCount
   const totalCount = filteredCount
 
-  // Compute company prominence (count of listings per company in current result set)
-  const prominenceMap: Record<string, number> = {}
-  for (const l of listings) {
-    const cid = (l as any).companies?.id
-    if (cid) prominenceMap[cid] = (prominenceMap[cid] ?? 0) + 1
-  }
-
-  // Sort order:
-  //   1. Featured (active)
-  //   2. If Pakistan filter: global companies before local PK companies
-  //   3. Prominence (company listing count in result set, desc)
-  //   4. Confidence rank
   const today = new Date().toISOString().split('T')[0]
   const CONFIDENCE_RANK: Record<string, number> = {
     confirmed_open: 2,
     unclear: 1,
     restricted_other_region: 0,
   }
-  const sorted = [...listings].sort((a, b) => {
-    const aF = (a as any).featured && (a as any).featured_until >= today ? 1 : 0
-    const bF = (b as any).featured && (b as any).featured_until >= today ? 1 : 0
-    if (bF !== aF) return bF - aF
 
-    // Pakistan filter: global-first ordering
-    if (region === 'Pakistan') {
-      const aLocal = LOCAL_PK_COMPANIES.has((a as any).companies?.name ?? '') ? 1 : 0
-      const bLocal = LOCAL_PK_COMPANIES.has((b as any).companies?.name ?? '') ? 1 : 0
-      if (aLocal !== bLocal) return aLocal - bLocal
+  let sorted: any[]
+  if (useDefault) {
+    // Default curated view: preserve diversity order from curateDiverseTop10.
+    // Only float active featured listings to the top — no prominence sort,
+    // which would collapse the company diversity the curation algorithm built.
+    sorted = [...listings].sort((a, b) => {
+      const aF = (a as any).featured && (a as any).featured_until >= today ? 1 : 0
+      const bF = (b as any).featured && (b as any).featured_until >= today ? 1 : 0
+      return bF - aF
+    })
+  } else {
+    // Filtered / paginated views: full sort by prominence + confidence
+    const prominenceMap: Record<string, number> = {}
+    for (const l of listings) {
+      const cid = (l as any).companies?.id
+      if (cid) prominenceMap[cid] = (prominenceMap[cid] ?? 0) + 1
     }
+    sorted = [...listings].sort((a, b) => {
+      const aF = (a as any).featured && (a as any).featured_until >= today ? 1 : 0
+      const bF = (b as any).featured && (b as any).featured_until >= today ? 1 : 0
+      if (bF !== aF) return bF - aF
 
-    // Prominence (higher = more active listings = bigger company)
-    const aProm = prominenceMap[(a as any).companies?.id ?? ''] ?? 0
-    const bProm = prominenceMap[(b as any).companies?.id ?? ''] ?? 0
-    if (bProm !== aProm) return bProm - aProm
+      // Pakistan filter: global companies before local PK companies
+      if (region === 'Pakistan') {
+        const aLocal = LOCAL_PK_COMPANIES.has((a as any).companies?.name ?? '') ? 1 : 0
+        const bLocal = LOCAL_PK_COMPANIES.has((b as any).companies?.name ?? '') ? 1 : 0
+        if (aLocal !== bLocal) return aLocal - bLocal
+      }
 
-    const aC = CONFIDENCE_RANK[(a as any).region_confidence ?? 'unclear'] ?? 1
-    const bC = CONFIDENCE_RANK[(b as any).region_confidence ?? 'unclear'] ?? 1
-    return bC - aC
-  })
+      // Prominence (company listing count in result set, desc)
+      const aProm = prominenceMap[(a as any).companies?.id ?? ''] ?? 0
+      const bProm = prominenceMap[(b as any).companies?.id ?? ''] ?? 0
+      if (bProm !== aProm) return bProm - aProm
+
+      const aC = CONFIDENCE_RANK[(a as any).region_confidence ?? 'unclear'] ?? 1
+      const bC = CONFIDENCE_RANK[(b as any).region_confidence ?? 'unclear'] ?? 1
+      return bC - aC
+    })
+  }
 
   // Build pagination base href preserving active filters
   const filterParams = new URLSearchParams()

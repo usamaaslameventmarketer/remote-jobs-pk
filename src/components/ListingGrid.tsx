@@ -194,7 +194,7 @@ function JobCard({ listing }: { listing: ListingRow }) {
 
 function PaywallGate({ lockedCount, isLoggedIn }: { lockedCount: number; isLoggedIn: boolean }) {
   return (
-    <div className="rounded-xl border-2 border-[#1A6B4A] bg-gradient-to-b from-[#F0FAF5] to-white p-7 text-center my-2">
+    <div className="rounded-xl border border-[#B6DFD0] bg-white p-7 text-center w-full max-w-sm" style={{ boxShadow: '0 8px 40px 0 rgba(26,107,74,0.13), 0 2px 8px 0 rgba(0,0,0,0.08)' }}>
       <div className="w-11 h-11 rounded-full bg-[#1A6B4A] flex items-center justify-center mx-auto mb-4">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
@@ -355,25 +355,34 @@ export function ListingGrid({
 
       {/* Show gate only once we know user isn't pro (avoid flash) */}
       {(locked.length > 0 || totalCount > FREE_COUNT) && isPro === false && (
-        <>
-          <PaywallGate lockedCount={Math.max(locked.length, totalCount - FREE_COUNT)} isLoggedIn={isLoggedIn} />
-
-          {/* Blurred preview of locked listings */}
-          <div className="relative overflow-hidden rounded-xl max-h-[520px]">
+        locked.length > 0 ? (
+          <div className="relative rounded-xl overflow-hidden">
+            {/* Blurred listings as backdrop */}
             <div className="space-y-3 pointer-events-none select-none">
-              {locked.slice(0, 6).map((listing, i) => (
+              {locked.slice(0, 8).map((listing, i) => (
                 <div
                   key={listing.id}
-                  className="blur-[5px]"
-                  style={{ opacity: Math.max(0.15, 1 - i * 0.18) }}
+                  style={{
+                    filter: 'blur(6px)',
+                    opacity: Math.max(0.08, 1 - i * 0.14),
+                    transform: 'scale(0.995)',
+                  }}
                 >
                   <JobCard listing={listing} />
                 </div>
               ))}
             </div>
-            <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-b from-transparent to-white pointer-events-none" />
+            {/* Smooth fade — starts early so no hard edge at top */}
+            <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-white to-transparent pointer-events-none" />
+            <div className="absolute inset-x-0 bottom-0 h-56 bg-gradient-to-b from-transparent to-white pointer-events-none" />
+            {/* Paywall card floating above blurred content */}
+            <div className="absolute inset-0 flex items-center justify-center px-4">
+              <PaywallGate lockedCount={Math.max(locked.length, totalCount - FREE_COUNT)} isLoggedIn={isLoggedIn} />
+            </div>
           </div>
-        </>
+        ) : (
+          <PaywallGate lockedCount={totalCount - FREE_COUNT} isLoggedIn={isLoggedIn} />
+        )
       )}
     </div>
   )
