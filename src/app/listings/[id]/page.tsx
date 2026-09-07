@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { CompanyLogo } from '@/components/CompanyLogo'
+import { ApplyButton } from '@/components/ApplyButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -353,28 +354,20 @@ export default async function ListingDetailPage({
             </div>
 
             {/* Desktop apply CTA */}
-            <a
-              href={listing.original_url}
-              target="_blank"
-              rel="noopener noreferrer"
+            <ApplyButton
+              originalUrl={listing.original_url}
               className="hidden md:inline-flex w-full items-center justify-center bg-[#1A6B4A] hover:bg-[#155a3d] text-white font-semibold py-3.5 px-6 rounded-lg transition-colors text-sm"
-            >
-              Apply Now →
-            </a>
+            />
           </div>
         </div>
       </div>
 
       {/* Sticky mobile apply CTA */}
       <div className="fixed bottom-0 inset-x-0 p-4 bg-white border-t border-[#D1D9E0] md:hidden z-40">
-        <a
-          href={listing.original_url}
-          target="_blank"
-          rel="noopener noreferrer"
+        <ApplyButton
+          originalUrl={listing.original_url}
           className="block w-full text-center bg-[#1A6B4A] hover:bg-[#155a3d] text-white font-semibold py-3.5 px-6 rounded-lg transition-colors text-sm"
-        >
-          Apply Now →
-        </a>
+        />
       </div>
     </>
   )

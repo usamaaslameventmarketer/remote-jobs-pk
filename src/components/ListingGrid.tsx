@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { CompanyLogo } from './CompanyLogo'
 import { supabase } from '@/lib/supabase'
 
-const FREE_COUNT = 5
+const FREE_COUNT = 10
 
 type CompanyRow = {
   id: string
