@@ -97,23 +97,19 @@ const GREENHOUSE_SLUGS = [
   'asana', 'pagerduty',
   'liveperson', 'storyblok',
 
-  // Pakistan-explicit / South Asia remote hiring
-  // Global platforms that hire across South Asia and commonly post PK-eligible roles
-  'deel',                                   // Employer of record — hires worldwide incl. PK
-  'andela',                                 // Global talent marketplace (expanded beyond Africa)
-  'remitly',                                // Remittances — US↔PK is a top corridor
-  'velocityglobal',                         // Global employment platform
-  'papayaglobal',                           // Global payroll / EOR
-  // Pakistani tech companies & regional employers (404s silently skipped)
+  // Pakistan-explicit remote hiring (verified via Greenhouse job boards)
+  'gomotive',                               // Motive — dozens of "Pakistan - Remote" active listings
+  'podium81',                               // Podium — explicit Pakistan remote + Islamabad roles
+  'remotecom',                              // Remote.com — globally distributed, Pakistan-eligible
+  'bobtail',                                // Bobtail — freight/logistics, explicit Karachi listings
+  // Pakistani tech companies & regional employers (404s silently skipped if not on Greenhouse)
   'arbisoft',                               // Lahore-based software house
   'tkxel',                                  // Lahore-based software house
   'devsinc',                                // Lahore-based software house
   'folio3',                                 // Karachi/NJ software company
   '10pearls',                               // Pakistani-American software company
   'netsol',                                 // NetSol Technologies (NASDAQ-listed, Lahore)
-  // 'careem' removed — in-office employer, not remote
   'dubizzle',                               // EMPG — classifieds, large PK presence
-  'tajawal',                                // Travel tech, MENA/South Asia
 ]
 
 const LEVER_SLUGS = [
@@ -123,10 +119,13 @@ const LEVER_SLUGS = [
   'sonatype',                               // Software supply chain security — 34 jobs
   // Live but 0 jobs — keep in case they post
   'highspot', 'clari',
-  // Pakistan-explicit / South Asia remote hiring
+  // Pakistan-explicit remote hiring (verified via Lever job boards)
+  'smart-working-solutions',                // Every role tagged (PK) — Pakistan-only recruiter
+  'weloglobal',                             // Welo Data — Islamabad listings, AI training data
+  'binance',                                // Binance — Pakistan community + global remote eng roles
+  // Kept for when they post (currently 0 jobs)
   'doist',                                  // Todoist — async-first, global distributed team
   'buffer',                                 // Social media tool — fully remote, global
-  'remote',                                 // Remote.com — global employment platform
 ]
 
 // ---------------------------------------------------------------------------
@@ -619,12 +618,11 @@ async function fetchGreenhouse() {
     smartsheet: 'Smartsheet', samsara: 'Samsara', tripactions: 'Navan',
     mercury: 'Mercury', gocardless: 'GoCardless', tipaltisolutions: 'Tipalti',
     lithic: 'Lithic', upwork: 'Upwork', liveperson: 'LivePerson', storyblok: 'Storyblok',
-    // Pakistan-explicit / South Asia remote hiring
-    deel: 'Deel', andela: 'Andela', remitly: 'Remitly',
-    velocityglobal: 'Velocity Global', papayaglobal: 'Papaya Global',
+    // Pakistan-explicit remote hiring
+    gomotive: 'Motive', podium81: 'Podium', remotecom: 'Remote.com', bobtail: 'Bobtail',
     arbisoft: 'Arbisoft', tkxel: 'Tkxel', devsinc: 'Devsinc',
     folio3: 'Folio3', '10pearls': '10Pearls', netsol: 'NetSol Technologies',
-    careem: 'Careem', dubizzle: 'Dubizzle Group', tajawal: 'Tajawal',
+    dubizzle: 'Dubizzle Group',
   }
 
   // Process in batches to avoid holding all full-description HTML in memory simultaneously
@@ -718,6 +716,9 @@ async function fetchLever() {
     evisort: 'Evisort', lexion: 'Lexion',
     // New additions
     pipedrive: 'Pipedrive', sonatype: 'Sonatype',
+    // Pakistan-explicit remote hiring
+    'smart-working-solutions': 'Smart Working Solutions',
+    weloglobal: 'Welo Data', binance: 'Binance',
   }
 
   await Promise.allSettled(
