@@ -214,14 +214,17 @@ const REMOTE_AGGREGATORS = new Set() // no aggregator sources remain; kept to av
  * @param {string} source - job._source value
  * @returns {string | null}
  */
-function classifyRegion(location, source) {
+function classifyRegion(location, source, titleHint = '') {
   const raw = (location ?? '').trim()
   const isAggregator = REMOTE_AGGREGATORS.has(source)
 
   // ATS source with a location that has no 'remote' indicator and no broad
   // region keyword → almost certainly an in-office listing, reject it.
+  // We also check the job title as a fallback — some boards (e.g. Lever / SWS)
+  // encode remote status in the title: "Engineer (Remote, Full-Time)" with
+  // a bare country/city in the location field.
   if (!isAggregator && raw) {
-    const hasRemoteKeyword = /remote/i.test(raw)
+    const hasRemoteKeyword = /remote/i.test(raw) || /remote/i.test(titleHint)
     const hasBroadRegion = /\b(emea|apac|asia.?pacific|worldwide|global|anywhere|international)\b/i.test(raw)
     if (!hasRemoteKeyword && !hasBroadRegion) return null
   }
@@ -240,10 +243,11 @@ function classifyRegion(location, source) {
     /worldwide|global|anywhere|international|open globally|location independent|work from anywhere|\bwfa\b|all countries|any country|no geographic restriction|fully remote/.test(stripped)
   ) return 'Worldwide'
 
-  // Pakistan / South Asia — only when location explicitly says Remote + Pakistan
-  // "Remote (Pakistan)" → 'Pakistan', but "Karachi, Pakistan" → null (in-office)
+  // Pakistan / South Asia — only when location or title confirms remote
+  // "Remote (Pakistan)" → 'Pakistan', "Pakistan" + "(Remote)" in title → 'Pakistan'
+  // "Karachi, Pakistan" (no remote signal anywhere) → null (in-office)
   if (/pakistan|south[\s-]?asia/.test(stripped)) {
-    return /remote/i.test(raw) ? 'Pakistan' : null
+    return (/remote/i.test(raw) || /remote/i.test(titleHint)) ? 'Pakistan' : null
   }
 
   // EMEA — Europe, Middle East, Africa (broad keyword or any specific country)
@@ -270,8 +274,8 @@ function classifyRegion(location, source) {
     /\b(mexic|brazil|argentina|colombia|chile|peru|ecuador)\b/.test(stripped)
   ) return 'USA'
 
-  // Still has "remote" in the original string — unknown restriction but remote → Worldwide
-  if (/remote/i.test(raw)) return 'Worldwide'
+  // Still has "remote" in the original string or title — unknown restriction but remote → Worldwide
+  if (/remote/i.test(raw) || /remote/i.test(titleHint)) return 'Worldwide'
 
   // Aggregator pre-filters remote, so any unrecognized location is a region we
   // don't have a tag for → treat as Worldwide rather than losing the listing
@@ -373,7 +377,7 @@ function classifyCategory(title, tags = [], apiCategory = '') {
   if (/customer\s+(service|support|success)|support\s+specialist|help\s+desk|\bux\s+designer\b|\bui\s+designer\b|graphic\s+designer|product\s+(manager|designer|owner|lead)|visual\s+designer|operations\s+manager|project\s+manager|program\s+manager|\bscrum\b|agile\s+coach|technical\s+writer|community\s+manager|social\s+media\s+manager|content\s+creator|data\s+entry|transcri|virtual\s+assistant|supply\s+chain|logistics|procurement|purchasing|copywriter|creative\s+director|store\s+manager|retail|barber|cleaner|cleaning|maintenance\s+(tech|planner|worker)|room\s+attendant|bell\s+(person|hop)|lifeguard|painter\b|sandblaster|infanteer|surveyor|estimator|porter\b|coffee\s+roaster|merchandis|loss\s+prevention|facilities\s+planner|operator\s+sewing|sub\s+agent|general\s+manager|cabin\s+clean|\bbusiness\s+analyst\b|\bdata\s+analyst\b|\bdata\s+label(er|ing)\b|annotation\s+specialist|\bai\s+trainer\b|model\s+eval(uator)?|travel\s+consultant|\bfleet\s+|\btechnical\s+evangelist\b|\bdeveloper\s+evangelist\b/i.test(t)) return 'exclude'
 
   // ── Software Development / Engineering ───────────────────────────────────
-  if (/\b(software\s+engineer|software\s+developer|software\s+architect|web\s+developer|backend\s+engineer|frontend\s+engineer|front.?end\s+engineer|full.?stack\s+engineer|full.?stack\s+developer|mobile\s+engineer|mobile\s+developer|ios\s+engineer|android\s+engineer|devops\s+engineer|\bsre\b|site\s+reliability\s+engineer|platform\s+engineer|data\s+engineer|ml\s+engineer|machine\s+learning\s+engineer|ai\s+engineer|security\s+engineer|network\s+engineer|solutions\s+architect|solutions\s+engineer|cloud\s+engineer|cloud\s+architect|firmware\s+engineer|embedded\s+engineer|blockchain\s+developer|data\s+scientist|programmer|developer|qa\s+engineer|quality\s+engineer|database\s+admin|\bdba\b|\bdevops\b|\bsysadmin\b|principal\s+engineer|staff\s+engineer|engineering\s+manager|infrastructure\s+engineer|implementation\s+engineer)\b/i.test(t)) return 'Software Development'
+  if (/\b(software\s+engineer|software\s+developer|software\s+architect|web\s+developer|backend\s+engineer|frontend\s+engineer|front.?end\s+engineer|full.?stack\s+engineer|full.?stack\s+developer|mobile\s+engineer|mobile\s+developer|ios\s+engineer|android\s+engineer|devops\s+engineer|\bsre\b|site\s+reliability\s+engineer|platform\s+engineer|data\s+engineer|ml\s+engineer|machine\s+learning\s+engineer|ai\s+engineer|security\s+engineer|network\s+engineer|solutions\s+architect|solutions\s+engineer|cloud\s+engineer|cloud\s+architect|firmware\s+engineer|embedded\s+engineer|blockchain\s+developer|data\s+scientist|programmer|developer|qa\s+engineer|quality\s+engineer|automation\s+engineer|database\s+admin|\bdba\b|\bdevops\b|\bsysadmin\b|principal\s+engineer|staff\s+engineer|founding\s+engineer|engineering\s+manager|infrastructure\s+engineer|implementation\s+engineer|\bengineer\b)\b/i.test(t)) return 'Software Development'
   if (/\bsoftware.?dev(elopment)?\b|\bdevops\b|\bsysadmin\b|\bdata\s+science\b|\bmachine\s+learning\b/i.test(cat)) return 'Software Development'
 
   // ── Sales ─────────────────────────────────────────────────────────────────
@@ -882,7 +886,7 @@ async function ingest() {
   const timezoneBorderline = []
 
   for (const j of afterLanguage) {
-    const region = classifyRegion(j.location, j._source)
+    const region = classifyRegion(j.location, j._source, j.title)
     if (!region) {
       regionRejected++
       regionRejectedBySource[j._source] = (regionRejectedBySource[j._source] ?? 0) + 1

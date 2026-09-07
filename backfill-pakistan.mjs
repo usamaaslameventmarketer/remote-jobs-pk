@@ -45,7 +45,7 @@ let from = 0
 while (true) {
   const { data, error } = await sb
     .from('listings')
-    .select('id, title, region_eligibility, region_confidence, short_summary')
+    .select('id, title, region_eligibility, region_confidence, short_summary, full_description')
     .eq('is_active', true)
     .range(from, from + 999)
 
@@ -68,7 +68,9 @@ const excluded = []             // Had exclusion phrase — skipped
 const noSignal = []             // No Pakistan signal found
 
 for (const row of allListings) {
-  const text = row.short_summary ?? ''
+  // Check both short_summary and full_description — ingest uses full text (3000 chars)
+  // but short_summary (500 chars) is what was available during earlier backfill passes
+  const text = (row.full_description ?? row.short_summary ?? '')
 
   if (row.region_eligibility === 'Pakistan') {
     alreadyPakistan.push(row)
