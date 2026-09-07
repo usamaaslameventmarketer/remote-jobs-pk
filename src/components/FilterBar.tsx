@@ -5,15 +5,16 @@ import { useEffect, useRef, useState } from 'react'
 import type React from 'react'
 import { MapPin, Briefcase, BarChart2 } from 'lucide-react'
 
-const LOCATION_OPTIONS = [
+const BASE_LOCATION_OPTIONS = [
   { label: 'All Locations', value: '' },
-  { label: '🇵🇰 Pakistan (explicit)', value: 'Pakistan' },
   { label: 'Worldwide', value: 'Worldwide' },
   { label: 'USA', value: 'USA' },
   { label: 'UK', value: 'UK' },
   { label: 'EMEA', value: 'EMEA' },
   { label: 'APAC', value: 'APAC' },
 ]
+
+const PAKISTAN_OPTION = { label: '🇵🇰 Pakistan (explicit)', value: 'Pakistan' }
 
 const DEPARTMENT_OPTIONS = [
   { label: 'All Departments', value: '' },
@@ -138,17 +139,23 @@ export function FilterBar({
   category = '',
   seniority = '',
   q = '',
+  showPakistan = false,
 }: {
   region?: string
   category?: string
   seniority?: string
   q?: string
+  showPakistan?: boolean
 }) {
+  const locationOptions = showPakistan
+    ? [BASE_LOCATION_OPTIONS[0], PAKISTAN_OPTION, ...BASE_LOCATION_OPTIONS.slice(1)]
+    : BASE_LOCATION_OPTIONS
+
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <Dropdown
         label="Location"
-        options={LOCATION_OPTIONS}
+        options={locationOptions}
         paramKey="region"
         currentValue={region}
         q={q}

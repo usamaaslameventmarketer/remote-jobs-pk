@@ -23,6 +23,15 @@ async function getLogoCompanies() {
   return data ?? []
 }
 
+async function hasPakistanListings() {
+  const { count } = await supabase
+    .from('listings')
+    .select('*', { count: 'exact', head: true })
+    .eq('is_active', true)
+    .eq('region_eligibility', 'Pakistan')
+  return (count ?? 0) > 0
+}
+
 async function getListings({
   q,
   seniority,
@@ -140,7 +149,10 @@ export default async function HomePage({
   const logoCompanies = await getLogoCompanies()
   const page = Math.max(0, parseInt(pageStr ?? '0', 10) || 0)
 
-  const { listings, totalCount } = await getListings({ q, seniority, region, category, page })
+  const [{ listings, totalCount }, showPakistanFilter] = await Promise.all([
+    getListings({ q, seniority, region, category, page }),
+    hasPakistanListings(),
+  ])
 
   const hasFilters = !!(q || seniority || region || category)
 
@@ -277,6 +289,7 @@ export default async function HomePage({
             category={category ?? ''}
             seniority={seniority ?? ''}
             q={q ?? ''}
+            showPakistan={showPakistanFilter}
           />
         </div>
 
