@@ -14,7 +14,6 @@ const BASE_LOCATION_OPTIONS = [
   { label: 'APAC', value: 'APAC' },
 ]
 
-const PAKISTAN_OPTION = { label: '🇵🇰 Global Companies Hiring from Pakistan Specifically', shortLabel: '🇵🇰 Pakistan Only', value: 'Pakistan' }
 
 const DEPARTMENT_OPTIONS = [
   { label: 'All Departments', value: '' },
@@ -139,23 +138,19 @@ export function FilterBar({
   category = '',
   seniority = '',
   q = '',
-  showPakistan = false,
 }: {
   region?: string
   category?: string
   seniority?: string
   q?: string
-  showPakistan?: boolean
 }) {
-  const locationOptions = showPakistan
-    ? [BASE_LOCATION_OPTIONS[0], PAKISTAN_OPTION, ...BASE_LOCATION_OPTIONS.slice(1)]
-    : BASE_LOCATION_OPTIONS
+  const locationOptions = BASE_LOCATION_OPTIONS
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <Dropdown
         label="Location"
-        options={locationOptions}
+        options={BASE_LOCATION_OPTIONS}
         paramKey="region"
         currentValue={region}
         q={q}

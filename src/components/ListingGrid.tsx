@@ -200,12 +200,20 @@ function JobCard({ listing }: { listing: ListingRow }) {
                 {listing.region_confidence === 'restricted_other_region' && !isPakistan && <RegionRestrictionBadge />}
                 {listing.verified && <VerifiedBadge />}
                 {listing.salary_range && (() => {
-                  const pkr = parseSalaryPKR(listing.salary_range)
+                  const isEstimate = listing.salary_range.startsWith('EST ')
+                  const displaySalary = isEstimate ? listing.salary_range.slice(4) : listing.salary_range
+                  const pkr = parseSalaryPKR(displaySalary)
                   return (
                     <div className="text-right shrink-0">
-                      <span className="text-sm font-semibold text-[#111827] whitespace-nowrap block">
-                        {listing.salary_range}
-                      </span>
+                      {isEstimate ? (
+                        <span className="text-xs font-medium text-[#9BAFC4] whitespace-nowrap block italic">
+                          est. {displaySalary}
+                        </span>
+                      ) : (
+                        <span className="text-sm font-semibold text-[#111827] whitespace-nowrap block">
+                          {displaySalary}
+                        </span>
+                      )}
                       {pkr && (
                         <span className="text-xs text-[#4B7A62] whitespace-nowrap block mt-0.5">
                           {pkr}
@@ -377,11 +385,14 @@ export function ListingGrid({
 
   if (listings.length === 0) return null
 
-  // Pro users see everything + pagination nav
+  // Pro users: full board in pure chronological order (newest first) — no pinned priority
   if (isPro === true) {
+    const chronological = [...listings].sort((a, b) =>
+      new Date(b.date_added).getTime() - new Date(a.date_added).getTime()
+    )
     return (
       <div className="space-y-3">
-        {listings.map((listing) => (
+        {chronological.map((listing) => (
           <JobCard key={listing.id} listing={listing} />
         ))}
         <Pagination page={page} totalPages={totalPages} baseHref={baseHref} />

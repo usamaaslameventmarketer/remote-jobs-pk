@@ -14,6 +14,11 @@ export const revalidate = 60
 
 const PAGE_SIZE = 50
 
+// Pinned companies — always prioritised first in default + filtered views (pre-signup)
+const PINNED_COMPANIES = new Set([
+  'Canonical', 'GitLab', 'Stripe', 'Twilio', 'Anthropic', 'Dropbox',
+])
+
 // Known local Pakistani companies — shown after global companies in Pakistan filter
 const LOCAL_PK_COMPANIES = new Set([
   'Smart Working Solutions',
@@ -64,6 +69,7 @@ async function getCuratedPool() {
       )
     `)
     .eq('is_active', true)
+    .eq('region_eligibility', 'Worldwide')   // default view: Worldwide-only
     .order('date_added', { ascending: false })
     .limit(500)
   return data ?? []
@@ -74,17 +80,22 @@ function resolveCompany(companies: any): any {
 }
 
 function curateDiverseTop10(pool: any[]): any[] {
+  // Float pinned companies to the front of the pool (preserving date order within each group)
+  const poolName = (l: any) => resolveCompany(l.companies)?.name ?? ''
+  const orderedPool = [
+    ...pool.filter(l => PINNED_COMPANIES.has(poolName(l))),
+    ...pool.filter(l => !PINNED_COMPANIES.has(poolName(l))),
+  ]
+
   const result: any[] = []
   const deptCount: Record<string, number> = {}
   const companyCount: Record<string, number> = {}
   const MAX_PER_DEPT = 3
   const MAX_PER_COMPANY = 2
-  for (const listing of pool) {
+  for (const listing of orderedPool) {
     if (result.length >= 10) break
     const dept = listing.category ?? 'Other'
     const company = resolveCompany(listing.companies)
-    // Key by normalised name — handles both null IDs and multiple DB records
-    // for the same company (e.g. "Welo Data" vs "Welo Data, Inc.")
     const companyKey = (company?.name ?? '').toLowerCase().trim()
     if ((deptCount[dept] ?? 0) >= MAX_PER_DEPT) continue
     if (companyKey && (companyCount[companyKey] ?? 0) >= MAX_PER_COMPANY) continue
@@ -93,15 +104,6 @@ function curateDiverseTop10(pool: any[]): any[] {
     if (companyKey) companyCount[companyKey] = (companyCount[companyKey] ?? 0) + 1
   }
   return result
-}
-
-async function hasPakistanListings() {
-  const { count } = await supabase
-    .from('listings')
-    .select('*', { count: 'exact', head: true })
-    .eq('is_active', true)
-    .eq('region_eligibility', 'Pakistan')
-  return (count ?? 0) > 0
 }
 
 async function getListings({
@@ -150,7 +152,9 @@ async function getListings({
 
   if (q) query = query.ilike('title', `%${q}%`)
   if (seniority) query = query.eq('seniority', seniority)
-  if (region) query = query.eq('region_eligibility', region)
+  // 'Worldwide' filter folds in Pakistan listings (they also hire from PK)
+  if (region === 'Worldwide') query = query.in('region_eligibility', ['Worldwide', 'Pakistan'])
+  else if (region) query = query.eq('region_eligibility', region)
   if (category) query = query.eq('category', category)
 
   const { data, error, count } = await query
@@ -224,7 +228,7 @@ export default async function HomePage({
   const hasFilters = !!(q || seniority || region || category)
   const useDefault = !hasFilters && page === 0
 
-  const [listingsResult, showPakistanFilter, realTotalResult] = await Promise.all([
+  const [listingsResult, realTotalResult] = await Promise.all([
     useDefault
       ? getCuratedPool().then((pool) => {
           const top10 = curateDiverseTop10(pool)
@@ -249,14 +253,12 @@ export default async function HomePage({
           return { listings: [...top10, ...extras], totalCount: pool.length }
         })
       : getListings({ q, seniority, region, category, page }),
-    hasPakistanListings(),
     useDefault
       ? supabase.from('listings').select('*', { count: 'exact', head: true }).eq('is_active', true).then(({ count }) => count ?? 0)
       : Promise.resolve(null),
   ])
 
   const { listings, totalCount: filteredCount } = listingsResult as { listings: any[]; totalCount: number }
-  // For the hero stat, always show real total; for filters show filtered count
   const realTotal: number = useDefault ? (realTotalResult as number) : filteredCount
   const totalCount = filteredCount
 
@@ -278,28 +280,43 @@ export default async function HomePage({
       return bF - aF
     })
   } else {
-    // Filtered / paginated views: full sort by prominence + confidence
+    // Filtered / paginated views (pre-signup):
+    //   1. Featured
+    //   2. Pinned companies first — IF any pinned company has a listing in this result set
+    //   3. Fallback to prominence heuristic — only when NO pinned companies appear
+    //   4. Confidence rank as tiebreaker
+    const cName = (l: any): string => resolveCompany((l as any).companies)?.name ?? ''
+    const hasPinned = listings.some(l => PINNED_COMPANIES.has(cName(l)))
+
     const prominenceMap: Record<string, number> = {}
-    for (const l of listings) {
-      const cid = (l as any).companies?.id
-      if (cid) prominenceMap[cid] = (prominenceMap[cid] ?? 0) + 1
+    if (!hasPinned) {
+      for (const l of listings) {
+        const cid = (l as any).companies?.id
+        if (cid) prominenceMap[cid] = (prominenceMap[cid] ?? 0) + 1
+      }
     }
+
     sorted = [...listings].sort((a, b) => {
       const aF = (a as any).featured && (a as any).featured_until >= today ? 1 : 0
       const bF = (b as any).featured && (b as any).featured_until >= today ? 1 : 0
       if (bF !== aF) return bF - aF
 
-      // Pakistan filter: global companies before local PK companies
-      if (region === 'Pakistan') {
-        const aLocal = LOCAL_PK_COMPANIES.has((a as any).companies?.name ?? '') ? 1 : 0
-        const bLocal = LOCAL_PK_COMPANIES.has((b as any).companies?.name ?? '') ? 1 : 0
-        if (aLocal !== bLocal) return aLocal - bLocal
+      if (hasPinned) {
+        const aP = PINNED_COMPANIES.has(cName(a)) ? 1 : 0
+        const bP = PINNED_COMPANIES.has(cName(b)) ? 1 : 0
+        if (bP !== aP) return bP - aP
+      } else {
+        const aProm = prominenceMap[(a as any).companies?.id ?? ''] ?? 0
+        const bProm = prominenceMap[(b as any).companies?.id ?? ''] ?? 0
+        if (bProm !== aProm) return bProm - aProm
       }
 
-      // Prominence (company listing count in result set, desc)
-      const aProm = prominenceMap[(a as any).companies?.id ?? ''] ?? 0
-      const bProm = prominenceMap[(b as any).companies?.id ?? ''] ?? 0
-      if (bProm !== aProm) return bProm - aProm
+      // Pakistan filter: global companies before local PK companies
+      if (region === 'Pakistan') {
+        const aLocal = LOCAL_PK_COMPANIES.has(cName(a)) ? 1 : 0
+        const bLocal = LOCAL_PK_COMPANIES.has(cName(b)) ? 1 : 0
+        if (aLocal !== bLocal) return aLocal - bLocal
+      }
 
       const aC = CONFIDENCE_RANK[(a as any).region_confidence ?? 'unclear'] ?? 1
       const bC = CONFIDENCE_RANK[(b as any).region_confidence ?? 'unclear'] ?? 1
@@ -424,7 +441,6 @@ export default async function HomePage({
             category={category ?? ''}
             seniority={seniority ?? ''}
             q={q ?? ''}
-            showPakistan={showPakistanFilter}
           />
         </div>
 
