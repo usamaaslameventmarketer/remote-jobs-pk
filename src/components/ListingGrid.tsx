@@ -354,7 +354,7 @@ export function ListingGrid({
       ))}
 
       {/* Show gate only once we know user isn't pro (avoid flash) */}
-      {locked.length > 0 && isPro === false && (
+      {(locked.length > 0 || totalCount > FREE_COUNT) && isPro === false && (
         <>
           <PaywallGate lockedCount={Math.max(locked.length, totalCount - FREE_COUNT)} isLoggedIn={isLoggedIn} />
 
