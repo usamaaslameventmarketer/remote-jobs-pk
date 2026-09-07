@@ -168,7 +168,7 @@ function isEnglish(title, description) {
 // Stage 1 — Region filter (4-tier)
 //
 // Tier 1: Worldwide / Anywhere / no restriction   → highest priority
-// Tier 2: Explicitly Pakistan / South Asia
+// Tier 2: Explicitly Pakistan / South Asia        → own region tag 'Pakistan'
 // Tier 3: EMEA or APAC only (other continental labels → REJECT)
 // Tier 4: Visa sponsorship for Pakistani talent   → lowest priority
 // null  : Single-country restriction (not Pakistan) → REJECT
@@ -200,7 +200,7 @@ function classifyRegion(location, source) {
   // region keyword → almost certainly an in-office listing, reject it.
   if (!isAggregator && raw) {
     const hasRemoteKeyword = /remote/i.test(raw)
-    const hasBroadRegion = /\b(emea|apac|asia.?pacific|worldwide|global|anywhere|international)\b/i.test(raw)
+    const hasBroadRegion = /\b(emea|apac|asia.?pacific|worldwide|global|anywhere|international|pakistan|south[\s-]?asia)\b/i.test(raw)
     if (!hasRemoteKeyword && !hasBroadRegion) return null
   }
 
@@ -218,8 +218,8 @@ function classifyRegion(location, source) {
     /worldwide|global|anywhere|international|open globally|location independent|work from anywhere|\bwfa\b|all countries|any country|no geographic restriction|fully remote/.test(stripped)
   ) return 'Worldwide'
 
-  // Pakistan / South Asia — open to our audience, treat as Worldwide
-  if (/pakistan|south asia/.test(stripped)) return 'Worldwide'
+  // Pakistan / South Asia — explicit target audience → own region tag
+  if (/pakistan|south[\s-]?asia/.test(stripped)) return 'Pakistan'
 
   // EMEA — Europe, Middle East, Africa (broad keyword or any specific country)
   if (
@@ -284,6 +284,11 @@ const REGION_EXCLUSION_RE = /\b(?:US|U\.S\.|United States|USA)\s*-?\s*only\b|\bo
 // Phrases that CONFIRM the role is genuinely open to anyone globally
 const REGION_OPEN_RE = /\bhire\s+(?:globally|worldwide|internationally|from\s+anywhere|from\s+any\s+country)\b|\bwork\s+from\s+anywhere\b|\bno\s+geographic\s+restrictions?\b|\bglobally\s+distributed\b|\blocation\s+(?:independent|agnostic)\b|\bopen\s+to\s+(?:all\s+countries|candidates?\s+(?:anywhere|worldwide|globally|from\s+any\s+country))\b|\bwelcome\s+candidates?\s+from\s+(?:any|all)\s+(?:country|countries|location)\b|\bhire\s+in\s+any\s+country\b|\bfully\s+distributed\s+team\b/i
 
+// Phrases that confirm Pakistan / South Asia is an explicitly eligible location.
+// Fires on bare "Pakistan"/"Pakistani" — false positives are rare in ATS job descriptions,
+// and REGION_EXCLUSION_RE (checked first) guards against explicit non-PK restrictions.
+const PAKISTAN_POSITIVE_RE = /\bpakistan(?:i|is)?\b|\bsouth[\s-]?asia\b/i
+
 /**
  * Given the region already classified from the location field and the full
  * description text, return a confidence level and (if needed) a corrected
@@ -292,15 +297,24 @@ const REGION_OPEN_RE = /\bhire\s+(?:globally|worldwide|internationally|from\s+an
 function classifyRegionConfidence(region, description) {
   const text = description ?? ''
 
+  // Location field already pinpoints Pakistan — treat as confirmed (location is authoritative)
+  if (region === 'Pakistan') {
+    return { confidence: 'confirmed_open', correctedRegion: 'Pakistan' }
+  }
+
+  // Description-level exclusion check — fires before Pakistan positive to avoid false upgrades
   if (REGION_EXCLUSION_RE.test(text)) {
-    // Description explicitly restricts — fix the region tag if it was over-broad
     const correctedRegion = region === 'Worldwide' ? restrictionToRegion(text) : region
     return { confidence: 'restricted_other_region', correctedRegion }
   }
 
+  // Description explicitly names Pakistan/South Asia as an eligible location
+  if (PAKISTAN_POSITIVE_RE.test(text)) {
+    return { confidence: 'confirmed_open', correctedRegion: 'Pakistan' }
+  }
+
   if (region === 'Worldwide') {
     if (REGION_OPEN_RE.test(text)) return { confidence: 'confirmed_open', correctedRegion: region }
-    // Worldwide with no explicit signal either way
     return { confidence: 'unclear', correctedRegion: region }
   }
 

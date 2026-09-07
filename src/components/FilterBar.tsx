@@ -7,6 +7,7 @@ import { MapPin, Briefcase, BarChart2 } from 'lucide-react'
 
 const LOCATION_OPTIONS = [
   { label: 'All Locations', value: '' },
+  { label: '🇵🇰 Pakistan (explicit)', value: 'Pakistan' },
   { label: 'Worldwide', value: 'Worldwide' },
   { label: 'USA', value: 'USA' },
   { label: 'UK', value: 'UK' },

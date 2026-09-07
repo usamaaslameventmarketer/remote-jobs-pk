@@ -81,6 +81,14 @@ function HiresFromPakistanBadge() {
   )
 }
 
+function PakistanExplicitBadge() {
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold ring-1 ring-[#28A745]" style={{ background: '#01411C', color: '#fff' }}>
+      🇵🇰 Explicitly hiring from PK
+    </span>
+  )
+}
+
 function RegionRestrictionBadge() {
   return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-medium">
@@ -115,6 +123,7 @@ function SeniorityBadge({ seniority }: { seniority: string }) {
 function JobCard({ listing }: { listing: ListingRow }) {
   const company = Array.isArray(listing.companies) ? listing.companies[0] : listing.companies
   const isWorldwide = listing.region_eligibility === 'Worldwide'
+  const isPakistan = listing.region_eligibility === 'Pakistan'
   const today = new Date().toISOString().split('T')[0]
   const isFeaturedActive = listing.featured && listing.featured_until && listing.featured_until >= today
 
@@ -145,13 +154,15 @@ function JobCard({ listing }: { listing: ListingRow }) {
                 </p>
                 <h2 className="text-base font-semibold text-[#111827] mt-0.5 group-hover:text-[#1A6B4A] transition-colors leading-snug">
                   {listing.title}
-                  {isWorldwide && <span className="font-normal text-[#1A6B4A]"> — Remote from Anywhere</span>}
+                  {isPakistan && <span className="font-normal text-[#1A6B4A]"> — Hiring from Pakistan</span>}
+                  {isWorldwide && !isPakistan && <span className="font-normal text-[#1A6B4A]"> — Remote from Anywhere</span>}
                 </h2>
               </div>
               <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
                 {listing.source === 'employer_submitted' && <DirectFromEmployerBadge />}
+                {isPakistan && <PakistanExplicitBadge />}
                 {isWorldwide && listing.region_confidence !== 'restricted_other_region' && <HiresFromPakistanBadge />}
-                {listing.region_confidence === 'restricted_other_region' && <RegionRestrictionBadge />}
+                {listing.region_confidence === 'restricted_other_region' && !isPakistan && <RegionRestrictionBadge />}
                 {listing.verified && <VerifiedBadge />}
                 {listing.salary_range && (
                   <span className="text-sm font-semibold text-[#111827] whitespace-nowrap">
