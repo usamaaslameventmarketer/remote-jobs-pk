@@ -120,40 +120,6 @@ function SeniorityBadge({ seniority }: { seniority: string }) {
   )
 }
 
-// 1 USD ≈ 280 PKR (approximate — used for display only)
-const PKR_PER_USD = 280
-
-function parseSalaryPKR(raw: string | null): string | null {
-  if (!raw) return null
-  if (!/USD|\$/i.test(raw)) return null
-
-  const isYear = /year|yr|annual/i.test(raw)
-  const isHour = /hr|hour/i.test(raw)
-
-  const amounts = [...raw.matchAll(/[\d,]+(?:\.\d+)?(?:k|K)?/g)]
-    .map(m => {
-      const s = m[0].replace(/,/g, '')
-      return /[kK]$/.test(s) ? parseFloat(s) * 1000 : parseFloat(s)
-    })
-    .filter(n => !isNaN(n) && n >= 500)
-
-  if (amounts.length === 0) return null
-
-  const toMonthly = (n: number) => isYear ? n / 12 : isHour ? n * 160 : n
-  const monthly = amounts.map(toMonthly)
-
-  const fmt = (n: number) => {
-    const pkr = Math.round(n * PKR_PER_USD)
-    if (pkr >= 100000) return `${(pkr / 100000).toFixed(0)}L`
-    return `${Math.round(pkr / 1000)}K`
-  }
-
-  const range = monthly.length >= 2
-    ? `${fmt(monthly[0])}–${fmt(monthly[1])}`
-    : fmt(monthly[0])
-
-  return `≈ PKR ${range}/mo`
-}
 
 function JobCard({ listing }: { listing: ListingRow }) {
   const company = Array.isArray(listing.companies) ? listing.companies[0] : listing.companies
@@ -192,6 +158,19 @@ function JobCard({ listing }: { listing: ListingRow }) {
                   {isPakistan && <span className="font-normal text-[#1A6B4A]"> — Hiring from Pakistan</span>}
                   {isWorldwide && !isPakistan && <span className="font-normal text-[#1A6B4A]"> — Remote from Anywhere</span>}
                 </h2>
+                {listing.salary_range && (() => {
+                  const isEstimate = listing.salary_range.startsWith('EST ')
+                  const displaySalary = isEstimate ? listing.salary_range.slice(4) : listing.salary_range
+                  return isEstimate ? (
+                    <span className="text-xs font-medium text-[#9BAFC4] italic mt-1 block">
+                      est. {displaySalary}
+                    </span>
+                  ) : (
+                    <span className="text-sm font-semibold text-[#111827] mt-1 block">
+                      {displaySalary}
+                    </span>
+                  )
+                })()}
               </div>
               <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
                 {listing.source === 'employer_submitted' && <DirectFromEmployerBadge />}
@@ -199,29 +178,6 @@ function JobCard({ listing }: { listing: ListingRow }) {
                 {isWorldwide && listing.region_confidence !== 'restricted_other_region' && <HiresFromPakistanBadge />}
                 {listing.region_confidence === 'restricted_other_region' && !isPakistan && <RegionRestrictionBadge />}
                 {listing.verified && <VerifiedBadge />}
-                {listing.salary_range && (() => {
-                  const isEstimate = listing.salary_range.startsWith('EST ')
-                  const displaySalary = isEstimate ? listing.salary_range.slice(4) : listing.salary_range
-                  const pkr = parseSalaryPKR(displaySalary)
-                  return (
-                    <div className="text-right shrink-0">
-                      {isEstimate ? (
-                        <span className="text-xs font-medium text-[#9BAFC4] whitespace-nowrap block italic">
-                          est. {displaySalary}
-                        </span>
-                      ) : (
-                        <span className="text-sm font-semibold text-[#111827] whitespace-nowrap block">
-                          {displaySalary}
-                        </span>
-                      )}
-                      {pkr && (
-                        <span className="text-xs text-[#4B7A62] whitespace-nowrap block mt-0.5">
-                          {pkr}
-                        </span>
-                      )}
-                    </div>
-                  )
-                })()}
               </div>
             </div>
             <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
