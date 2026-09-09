@@ -14,6 +14,11 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://earnremotely.io'),
   title: TITLE,
   description: DESCRIPTION,
+  icons: {
+    icon: '/favicon.svg',
+    apple: '/favicon.svg',
+  },
+  manifest: '/site.webmanifest',
   openGraph: {
     title: TITLE,
     description: DESCRIPTION,

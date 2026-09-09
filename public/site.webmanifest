@@ -1,0 +1,16 @@
+{
+  "name": "Earn Remotely",
+  "short_name": "Earn Remotely",
+  "description": "Curated remote jobs for Pakistan-based talent",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0F2137",
+  "theme_color": "#0F2137",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 
 interface Props {
@@ -47,8 +48,8 @@ export function ApplyButton({ originalUrl, className, children = 'Apply Now →'
   }
 
   return (
-    <a href="/login" className={className}>
+    <Link href="/login" className={className}>
       Sign up to Apply →
-    </a>
+    </Link>
   )
 }

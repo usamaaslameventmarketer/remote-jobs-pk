@@ -76,7 +76,6 @@ export default function LoginPage() {
       return
     }
     router.push('/')
-    router.refresh()
   }
 
   async function handleSignUp(e: React.FormEvent) {
@@ -103,7 +102,6 @@ export default function LoginPage() {
       return
     }
     router.push('/onboarding/profile')
-    router.refresh()
   }
 
   async function handleGoogleSignIn() {

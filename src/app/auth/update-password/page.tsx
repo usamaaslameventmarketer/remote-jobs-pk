@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -78,9 +79,9 @@ export default function UpdatePasswordPage() {
         <div className="w-full max-w-sm">
           <div className="bg-white rounded-xl border border-[#D1D9E0] p-8 text-center">
             <p className="text-sm text-red-600 mb-4">{error}</p>
-            <a href="/login" className="text-sm text-[#1A6B4A] hover:underline font-medium">
+            <Link href="/login" className="text-sm text-[#1A6B4A] hover:underline font-medium">
               Back to sign in
-            </a>
+            </Link>
           </div>
         </div>
       </div>

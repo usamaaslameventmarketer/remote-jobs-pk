@@ -10,16 +10,16 @@ export function Nav() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [userName, setUserName] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const navRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
-    // Hydrate with current session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUserEmail(session?.user?.email ?? null)
       setUserName(session?.user?.user_metadata?.full_name ?? null)
     })
 
-    // Keep in sync with auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUserEmail(session?.user?.email ?? null)
       setUserName(session?.user?.user_metadata?.full_name ?? null)
@@ -33,6 +33,9 @@ export function Nav() {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false)
       }
+      if (navRef.current && !navRef.current.contains(e.target as Node)) {
+        setMobileOpen(false)
+      }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
@@ -41,14 +44,14 @@ export function Nav() {
   async function handleSignOut() {
     await supabase.auth.signOut()
     setMenuOpen(false)
+    setMobileOpen(false)
     router.push('/')
-    router.refresh()
   }
 
   const initial = (userName ?? userEmail)?.[0]?.toUpperCase()
 
   return (
-    <nav className="sticky top-0 z-50 bg-[#0F2137] border-b border-[#1a3050]">
+    <nav ref={navRef} className="sticky top-0 z-50 bg-[#0F2137] border-b border-[#1a3050]">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-6">
         <Link
           href="/"
@@ -58,30 +61,23 @@ export function Nav() {
           <span className="text-[#4ADE80]">Remotely</span>
         </Link>
 
+        {/* Desktop nav links */}
         <div className="hidden md:flex items-center gap-6">
-          <Link
-            href="/"
-            className="text-sm text-[#8BAFC9] hover:text-white transition-colors font-medium"
-          >
+          <Link href="/" className="text-sm text-[#8BAFC9] hover:text-white transition-colors font-medium">
             Browse Jobs
           </Link>
-          <Link
-            href="/companies"
-            className="text-sm text-[#8BAFC9] hover:text-white transition-colors font-medium"
-          >
+          <Link href="/companies" className="text-sm text-[#8BAFC9] hover:text-white transition-colors font-medium">
             Companies
           </Link>
-          <Link
-            href="/pricing"
-            className="text-sm text-[#8BAFC9] hover:text-white transition-colors font-medium"
-          >
+          <Link href="/pricing" className="text-sm text-[#8BAFC9] hover:text-white transition-colors font-medium">
             Pricing
           </Link>
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Desktop account dropdown / login */}
           {userEmail ? (
-            <div ref={menuRef} className="relative">
+            <div ref={menuRef} className="relative hidden md:block">
               <button
                 type="button"
                 onClick={() => setMenuOpen((v) => !v)}
@@ -112,7 +108,7 @@ export function Nav() {
           ) : (
             <Link
               href="/login"
-              className="hidden sm:block text-sm text-[#8BAFC9] hover:text-white transition-colors font-medium"
+              className="hidden md:block text-sm text-[#8BAFC9] hover:text-white transition-colors font-medium"
             >
               Log in
             </Link>
@@ -124,8 +120,60 @@ export function Nav() {
           >
             Post a Job
           </Link>
+
+          {/* Hamburger — mobile only */}
+          <button
+            type="button"
+            onClick={() => setMobileOpen((v) => !v)}
+            className="md:hidden flex flex-col justify-center items-center w-8 h-8 gap-[5px] focus:outline-none"
+            aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={mobileOpen}
+          >
+            <span className={`block w-5 h-0.5 bg-white transition-all duration-200 ${mobileOpen ? 'rotate-45 translate-y-[7px]' : ''}`} />
+            <span className={`block w-5 h-0.5 bg-white transition-all duration-200 ${mobileOpen ? 'opacity-0' : ''}`} />
+            <span className={`block w-5 h-0.5 bg-white transition-all duration-200 ${mobileOpen ? '-rotate-45 -translate-y-[7px]' : ''}`} />
+          </button>
         </div>
       </div>
+
+      {/* Mobile slide-down menu */}
+      {mobileOpen && (
+        <div className="md:hidden border-t border-[#1a3050] bg-[#0F2137] px-4 py-3">
+          <div className="flex flex-col gap-1">
+            <Link href="/" onClick={() => setMobileOpen(false)} className="px-3 py-2.5 text-sm text-[#8BAFC9] hover:text-white hover:bg-[#1a3050] rounded-lg transition-colors font-medium">
+              Browse Jobs
+            </Link>
+            <Link href="/companies" onClick={() => setMobileOpen(false)} className="px-3 py-2.5 text-sm text-[#8BAFC9] hover:text-white hover:bg-[#1a3050] rounded-lg transition-colors font-medium">
+              Companies
+            </Link>
+            <Link href="/pricing" onClick={() => setMobileOpen(false)} className="px-3 py-2.5 text-sm text-[#8BAFC9] hover:text-white hover:bg-[#1a3050] rounded-lg transition-colors font-medium">
+              Pricing
+            </Link>
+
+            <div className="border-t border-[#1a3050] my-1" />
+
+            {userEmail ? (
+              <>
+                <div className="px-3 py-2">
+                  {userName && <p className="text-sm text-white font-medium truncate">{userName}</p>}
+                  <p className="text-xs text-[#8BAFC9] truncate mt-0.5">{userEmail}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  className="text-left px-3 py-2.5 text-sm text-[#8BAFC9] hover:text-white hover:bg-[#1a3050] rounded-lg transition-colors font-medium"
+                >
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <Link href="/login" onClick={() => setMobileOpen(false)} className="px-3 py-2.5 text-sm text-[#8BAFC9] hover:text-white hover:bg-[#1a3050] rounded-lg transition-colors font-medium">
+                Log in
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
     </nav>
   )
 }

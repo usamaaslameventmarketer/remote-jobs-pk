@@ -130,7 +130,7 @@ function JobCard({ listing }: { listing: ListingRow }) {
 
   return (
     <Link href={`/listings/${listing.id}`}>
-      <article className={`rounded-xl border p-4 sm:p-5 transition-all cursor-pointer group ${
+      <article className={`rounded-xl border p-4 sm:p-5 transition-all duration-200 cursor-pointer group ${
         isFeaturedActive
           ? 'bg-amber-50 border border-l-4 border-amber-200 border-l-amber-400 hover:shadow-md hover:border-amber-300 hover:border-l-amber-500'
           : 'bg-white border-[#D1D9E0] hover:border-[#9BAFC4] hover:shadow-sm'
@@ -304,12 +304,14 @@ export function ListingGrid({
   page = 0,
   totalPages = 1,
   baseHref = '/?',
+  hasActiveFilters = false,
 }: {
   listings: ListingRow[]
   totalCount?: number
   page?: number
   totalPages?: number
   baseHref?: string
+  hasActiveFilters?: boolean
 }) {
   // null = still checking, true/false = resolved
   const [isPro, setIsPro] = useState<boolean | null>(null)
@@ -339,7 +341,30 @@ export function ListingGrid({
     checkAccess()
   }, [])
 
-  if (listings.length === 0) return null
+  if (listings.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <div className="w-12 h-12 rounded-full bg-white border border-[#D1D9E0] flex items-center justify-center mx-auto mb-4">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7A8D" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="8" />
+            <path d="M21 21l-4.35-4.35" />
+          </svg>
+        </div>
+        {hasActiveFilters ? (
+          <>
+            <p className="text-[#111827] font-medium mb-1">No roles match these filters right now</p>
+            <p className="text-sm text-[#6B7A8D] mb-4">Try adjusting or clearing your filters.</p>
+            <Link href="/" className="text-sm text-[#1A6B4A] hover:underline font-medium">Clear filters</Link>
+          </>
+        ) : (
+          <>
+            <p className="text-[#111827] font-medium mb-1">No listings right now</p>
+            <p className="text-sm text-[#6B7A8D]">New roles are added daily — check back soon.</p>
+          </>
+        )}
+      </div>
+    )
+  }
 
   // Pro users: full board in pure chronological order (newest first) — no pinned priority
   if (isPro === true) {
