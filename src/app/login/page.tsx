@@ -91,7 +91,6 @@ export default function LoginPage() {
       password,
       options: {
         data: { full_name: name.trim() },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     })
     setLoading(false)
@@ -103,7 +102,8 @@ export default function LoginPage() {
       )
       return
     }
-    setMessage('Account created! Check your email to confirm your address, then come back here to sign in.')
+    router.push('/onboarding/profile')
+    router.refresh()
   }
 
   async function handleGoogleSignIn() {

@@ -15,9 +15,14 @@ export default function AuthCallbackPage() {
 
     if (code) {
       // PKCE flow (?code=...)
-      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+      supabase.auth.exchangeCodeForSession(code).then(async ({ error }) => {
         if (error) {
-          setError('This confirmation link is invalid or has already been used.')
+          const { data: { session } } = await supabase.auth.getSession()
+          if (session) {
+            router.replace('/onboarding/profile')
+          } else {
+            setError('This confirmation link is invalid or has already been used.')
+          }
         } else {
           router.replace(next)
         }
