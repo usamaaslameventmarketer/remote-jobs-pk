@@ -144,9 +144,25 @@ export async function generateMetadata({
     ? listing.companies[0]
     : listing.companies
 
+  const title = `${listing.title} at ${company?.name ?? 'Unknown'} — Earn Remotely`
+  const description = cleanText(listing.short_summary ?? '')
+
   return {
-    title: `${listing.title} at ${company?.name ?? 'Unknown'} — Earn Remotely`,
-    description: cleanText(listing.short_summary ?? ''),
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: `https://earnremotely.io/listings/${id}`,
+      siteName: 'Earn Remotely',
+      locale: 'en_US',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+    },
   }
 }
 
